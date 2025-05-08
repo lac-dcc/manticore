@@ -1,0 +1,12 @@
+module {
+  hw.module @top(in %a : i4, in %b : i4, in %c : i4, in %d : i4, out out1 : i4, out out2 : i4) {
+    %c-1_i4 = hw.constant -1 : i4
+    %0 = comb.and %a, %b : i4
+    %1 = comb.xor %a, %c-1_i4 : i4
+    %2 = comb.and %1, %c : i4
+    %3 = comb.or %0, %2 {sv.namehint = "temp2"} : i4
+    %4 = comb.xor %3, %d : i4
+    %5 = comb.or %3, %d : i4
+    hw.output %4, %5 : i4, i4
+  }
+}
