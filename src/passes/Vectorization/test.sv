@@ -40,6 +40,8 @@ module test_multiple_groups_mixed(
     output wire [3:0] outC
 );
     assign outA[0] = inA[0];
+    assign outC[1] = inC[1];
+    assign outC[0] = inC[0];
     assign outB[1] = inB[1];
     assign outC[3] = inC[3];
     assign outA[1] = inA[1];
