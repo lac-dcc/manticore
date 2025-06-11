@@ -18,7 +18,6 @@
 using namespace mlir;
 using namespace circt;
 using namespace moore;
-using namespace hw;
 
 namespace {
 
@@ -41,9 +40,6 @@ using IndexedGroupMap = std::map<int, ScalarAssignGroup>;
 using SourceGroupMap  = std::map<mlir::Value, IndexedGroupMap, ValueComparator>;
 using AssignTree      = std::map<mlir::Value, SourceGroupMap,  ValueComparator>;
 
-///  Returns true if the group represents a reverse pattern:
-///  dst indices go up by 1 (…,2,1,0)
-///  src indices go down by 1 (0,1,2,… in the opposite direction)
 static bool isReverse(const std::vector<ScalarAssignGroup> &grp) {
   if (grp.size() < 2)
     return false;
@@ -52,17 +48,46 @@ static bool isReverse(const std::vector<ScalarAssignGroup> &grp) {
   return dstStride == 1 && srcStride == -1;
 }
 
-//  contiguous slice
-void vectorizeGroup(std::vector<ScalarAssignGroup> &group){
-    if (group.empty()) return;
+bool isBitMixGroup(const std::vector<ScalarAssignGroup> &group) {
+  int n = group.size();
+  if (n < 2)
+    return false;
 
-    // llvm::errs() << "Vectorizing group of size: " << group.size() << "\n";
-    // for (size_t i = 0; i < group.size(); ++i) {
-    //     llvm::errs() << "  Element " << i 
-    //                  << ": index = " << group[i].index
-    //                  << ", dst base = " << group[i].extractRef.getOperand()
-    //                  << ", src base = " << group[i].extract.getOperand() << "\n";
-    // }
+  bool isLinear = true;
+  for (int i = 0; i < n; ++i) {
+    if (group[i].srcIndex != group[i].dstIndex) {
+      isLinear = false;
+      break;
+    }
+  }
+  if (isLinear)
+    return false;
+
+  if (isReverse(group))
+    return false;
+
+  std::set<int> srcIndices, dstIndices;
+  for (const auto &g : group) {
+    srcIndices.insert(g.srcIndex);
+    dstIndices.insert(g.dstIndex);
+  }
+
+  if (srcIndices.size() != n || dstIndices.size() != n)
+    return false;
+
+  int srcMin = *srcIndices.begin();
+  int dstMin = *dstIndices.begin();
+
+  for (int i = 0; i < n; ++i) {
+    if (!srcIndices.count(srcMin + i) || !dstIndices.count(dstMin + i))
+      return false;
+  }
+
+  return true;
+}
+
+static void vectorizeGroup(std::vector<ScalarAssignGroup> &group){
+    if (group.empty()) return;
 
     // create builder at first assign's context
     auto builder = OpBuilder(group.front().assign.getContext());
@@ -91,8 +116,6 @@ void vectorizeGroup(std::vector<ScalarAssignGroup> &group){
     }
 }
 
-// vectorizes a reverse pattern group where
-// dst indices increase and src indices decrease
 static void vectorizeReverseGroup(std::vector<ScalarAssignGroup> &group) {
   if (group.empty())
     return;
@@ -137,93 +160,127 @@ static void vectorizeReverseGroup(std::vector<ScalarAssignGroup> &group) {
   }
 }
 
+static void vectorizeMixGroup(std::vector<ScalarAssignGroup> &group) {
+  if (group.empty())
+    return;
+
+  llvm::sort(group, [](const ScalarAssignGroup &a, const ScalarAssignGroup &b) {
+    return a.dstIndex < b.dstIndex;
+  });
+
+  OpBuilder builder(group.front().assign.getContext());
+  builder.setInsertionPoint(group.front().assign);
+
+  Location loc = group.front().assign.getLoc();
+  Value dst    = group.front().extractRef.getOperand(); // !moore.ref<lN>
+  Value src    = group.front().extract.getOperand();    // !moore.lN
+
+  int width = group.size();
+
+  auto srcIntTy = mlir::cast<moore::IntType>(src.getType());
+  auto domain   = srcIntTy.getDomain();
+
+  auto bitType   = moore::IntType::get(builder.getContext(), /*width=*/1, domain);
+  auto sliceType = moore::IntType::get(builder.getContext(), /*width=*/width, domain);
+
+  SmallVector<Value> bits;
+  for (auto &g : group) {
+    auto bit = builder.create<moore::ExtractOp>(
+        loc, bitType, src, builder.getI32IntegerAttr(g.srcIndex));
+    bits.push_back(bit);
+  }
+
+  std::reverse(bits.begin(), bits.end());
+
+  Value vec = builder.create<moore::ConcatOp>(loc, sliceType, bits);
+
+  builder.create<moore::ContinuousAssignOp>(loc, dst, vec);
+
+  for (auto &g : group) {
+    g.assign.erase();
+    g.extractRef.erase();
+    g.extract.erase();
+  }
+}
+
+void collectAssigns(mlir::ModuleOp module, AssignTree &assignTree) {
+  module.walk([&](moore::ContinuousAssignOp assign) {
+    auto lhs = assign.getDst();
+    auto rhs = assign.getSrc();
+
+    auto extractRef = dyn_cast_or_null<moore::ExtractRefOp>(lhs.getDefiningOp());
+    auto extract = dyn_cast_or_null<moore::ExtractOp>(rhs.getDefiningOp());
+    if (!extractRef || !extract)
+      return;
+
+    auto dstAttr = extractRef->getAttrOfType<mlir::IntegerAttr>("lowBit");
+    auto srcAttr = extract->getAttrOfType<mlir::IntegerAttr>("lowBit");
+    if (!dstAttr || !srcAttr)
+      return;
+
+    int dstIndex = dstAttr.getInt();
+    int srcIndex = srcAttr.getInt();
+
+    assignTree[extractRef.getOperand()][extract.getOperand()][dstIndex] =
+        {extractRef, extract, assign, dstIndex, srcIndex};
+
+    llvm::errs() << "Found assign: dst[" << dstIndex
+                 << "] = src[" << srcIndex << "]\n";
+  });
+}
+
+void processAssignTree(AssignTree &assignTree) {
+  for (auto &[dst, srcMap] : assignTree) {
+    for (auto &[src, indexMap] : srcMap) {
+
+      std::vector<int> sortedDstIndices;
+      for (const auto &[dstIndex, _] : indexMap)
+        sortedDstIndices.push_back(dstIndex);
+      std::sort(sortedDstIndices.begin(), sortedDstIndices.end());
+
+      std::vector<ScalarAssignGroup> group;
+      for (int dstIndex : sortedDstIndices) {
+        group.push_back(indexMap[dstIndex]);
+      }
+
+      if (group.size() > 1) {
+        if (isReverse(group)) {
+          llvm::errs() << ">> Detected REVERSE group (" << group.size()
+                       << " bits) between " << src << " -> " << dst << "\n";
+          vectorizeReverseGroup(group);
+        } else if (isBitMixGroup(group)) {
+          llvm::errs() << ">> Detected MIX group (" << group.size()
+                       << " bits) between " << src << " -> " << dst << "\n";
+          vectorizeMixGroup(group);
+        } else {
+          llvm::errs() << ">> Detected LINEAR group (" << group.size()
+                       << " bits) between " << src << " -> " << dst << "\n";
+          vectorizeGroup(group);
+        }
+      }
+    }
+  }
+}
+
 struct SimpleVectorizationPass
     : public mlir::PassWrapper<SimpleVectorizationPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
   void runOnOperation() override {
-    auto module = getOperation();
-    llvm::errs() << "Running SimpleVectorizationPass...\n";
+  auto module = getOperation();
+  llvm::errs() << "Running SimpleVectorizationPass...\n";
 
-    AssignTree assignTree;
+  AssignTree assignTree;
 
-    // Collects vectorizable assigns and organizes them in the tree
-    module.walk([&](moore::ContinuousAssignOp assign) {
-      auto lhs = assign.getDst(); // outA[0]
-      auto rhs = assign.getSrc(); //inA[0]
+  collectAssigns(module, assignTree);
+  processAssignTree(assignTree);
 
-      auto extractRef =
-          dyn_cast_or_null<moore::ExtractRefOp>(lhs.getDefiningOp()); //ExtractRefOp
-      auto extract = dyn_cast_or_null<moore::ExtractOp>(rhs.getDefiningOp()); //ExtractOp
-      if (!extractRef || !extract) //verify if they exist
-        return;
-
-      auto dstAttr =
-          extractRef->getAttrOfType<mlir::IntegerAttr>("lowBit"); 
-      auto srcAttr = extract->getAttrOfType<mlir::IntegerAttr>("lowBit");
-      if (!dstAttr || !srcAttr)
-        return;
-
-      int dstIndex = dstAttr.getInt();
-      int srcIndex = srcAttr.getInt();
-
-      assignTree[extractRef.getOperand()][extract.getOperand()][dstIndex] =
-          {extractRef, extract, assign, dstIndex, srcIndex};
-
-      llvm::errs() << "Found assign: dst[" << dstIndex
-                   << "] = src[" << srcIndex << "]\n";
-    });
-
-    for (auto &[dst, srcMap] : assignTree) { //traverse the tree
-      for (auto &[src, indexMap] : srcMap) { //traverse the tree
-        std::vector<int> sortedDstIndices;
-        for (const auto &[dstIndex, _] : indexMap) // extract the indexes
-          sortedDstIndices.push_back(dstIndex); // add the indexes to sortedDstIndices vector
-        std::sort(sortedDstIndices.begin(), sortedDstIndices.end()); // sort the indexes 
-
-        std::vector<ScalarAssignGroup> group;  //temporary group
-        for (size_t i = 0; i < sortedDstIndices.size(); ++i) {
-          auto current = indexMap[sortedDstIndices[i]];
-
-          if (!group.empty()) {
-            auto prev = group.back();
-            int dstStride = current.dstIndex - prev.dstIndex;
-            int srcStride = current.srcIndex - prev.srcIndex;
-
-            if (dstStride != 1 || (srcStride != 1 && srcStride != -1)) {
-                if (group.size() > 1) {
-                    if (isReverse(group)) {
-                        llvm::errs() << ">> Detected REVERSE group (" << group.size()
-                                    << " bits) between " << src << " -> " << dst << "\n";
-                        vectorizeReverseGroup(group);
-                    } else {
-                        vectorizeGroup(group);
-                    }
-                }
-              group.clear();
-            }
-          }
-          group.push_back(current);
-        }
-
-        if (group.size() > 1) {
-          if (isReverse(group)) {
-            llvm::errs() << ">> Detected REVERSE group (" << group.size()
-                         << " bits) between " << src << " -> " << dst << "\n";
-            vectorizeReverseGroup(group);
-          } else {
-            vectorizeGroup(group);
-          }
-        }
-      }
-    }
-
-    llvm::errs() << "SimpleVectorizationPass completed.\n";
-  }
+  llvm::errs() << "SimpleVectorizationPass completed.\n";
+}
 
   StringRef getArgument() const override { return "simple-vec"; }
 
   StringRef getDescription() const override {
-    return "Simple Vectorization Pass – passo 1: detecção de grupos reversos";
+    return "Simple Vectorization Pass";
   }
 };
 } 
