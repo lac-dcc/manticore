@@ -23,3 +23,11 @@ module md3(	// test.cleaned.mlir:13:3
   assign out = {in[0], in[3:1]};	// test.cleaned.mlir:14:10, :15:10, :16:10, :17:5
 endmodule
 
+module md4(	// test.cleaned.mlir:19:3
+  input  [7:0] in,	// test.cleaned.mlir:19:21
+  output [7:0] out	// test.cleaned.mlir:19:35
+);
+
+  assign out = {in[7:6], in[4], in[5], in[0], in[3:1]};	// test.cleaned.mlir:20:10, :21:10, :22:10, :23:10, :24:10, :25:10, :26:5
+endmodule
+
