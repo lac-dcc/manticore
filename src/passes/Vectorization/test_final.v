@@ -7,27 +7,37 @@ module md1(	// test.cleaned.mlir:2:3
   assign out = in;	// test.cleaned.mlir:3:5
 endmodule
 
-module md2(	// test.cleaned.mlir:5:3
-  input  [3:0] in,	// test.cleaned.mlir:5:21
-  output [3:0] out	// test.cleaned.mlir:5:35
+module reverse(	// test.cleaned.mlir:5:3
+  input  [3:0] in,	// test.cleaned.mlir:5:25
+  output [3:0] out	// test.cleaned.mlir:5:39
 );
 
   assign out = {in[0], in[1], in[2], in[3]};	// test.cleaned.mlir:6:10, :7:10, :8:10, :9:10, :10:10, :11:5
 endmodule
 
-module md3(	// test.cleaned.mlir:13:3
-  input  [3:0] in,	// test.cleaned.mlir:13:21
-  output [3:0] out	// test.cleaned.mlir:13:35
+module mix_bit(	// test.cleaned.mlir:13:3
+  input  [3:0] in,	// test.cleaned.mlir:13:25
+  output [3:0] out	// test.cleaned.mlir:13:39
 );
 
   assign out = {in[0], in[3:1]};	// test.cleaned.mlir:14:10, :15:10, :16:10, :17:5
 endmodule
 
-module md4(	// test.cleaned.mlir:19:3
-  input  [7:0] in,	// test.cleaned.mlir:19:21
-  output [7:0] out	// test.cleaned.mlir:19:35
+module mix_bit2(	// test.cleaned.mlir:19:3
+  input  [7:0] in,	// test.cleaned.mlir:19:26
+  output [7:0] out	// test.cleaned.mlir:19:40
 );
 
   assign out = {in[7:6], in[4], in[5], in[0], in[3:1]};	// test.cleaned.mlir:20:10, :21:10, :22:10, :23:10, :24:10, :25:10, :26:5
+endmodule
+
+module pattern_recognition(	// test.cleaned.mlir:28:3
+  input  [3:0] a,	// test.cleaned.mlir:28:37
+               b,	// test.cleaned.mlir:28:49
+  input        sel,	// test.cleaned.mlir:28:61
+  output [3:0] result	// test.cleaned.mlir:28:76
+);
+
+  assign result = sel ? a : b;	// test.cleaned.mlir:29:10, :30:5
 endmodule
 
