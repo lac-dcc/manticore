@@ -1,4 +1,4 @@
 .vscode
 jgproject
 src/passes/Vectorization/VectorizePassOld.cpp
-src/passes/Vectorization/VectorizePass.so
+src/passes/Vectorization/Makefile
