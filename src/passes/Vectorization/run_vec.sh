@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Base file name (without extension)
-BASE_NAME="test"
+BASE_NAME="test2"
 
 # Step 1: Convert Verilog to IR Moore
 echo "Converting Verilog to IR Moore..."

@@ -29,6 +29,17 @@ struct ScalarAssignGroup {
   int srcIndex;
 };
 
+struct MuxAssignBit {
+  moore::ContinuousAssignOp assign; 
+  moore::ExtractRefOp extractRef; 
+  moore::OrOp orOp;
+  moore::AndOp andSelA;
+  moore::AndOp andNotSelB;
+  moore::ExtractOp extractA;
+  moore::ExtractOp extractB;
+  int bitIndex;
+};
+
 struct ValueComparator {
   bool operator()(mlir::Value lhs, mlir::Value rhs) const {
     return lhs.getAsOpaquePointer() < rhs.getAsOpaquePointer();
@@ -224,8 +235,56 @@ void collectAssigns(mlir::ModuleOp module, AssignTree &assignTree) {
     assignTree[extractRef.getOperand()][extract.getOperand()][dstIndex] =
         {extractRef, extract, assign, dstIndex, srcIndex};
 
-    llvm::errs() << "Found assign: dst[" << dstIndex
-                 << "] = src[" << srcIndex << "]\n";
+  //   llvm::errs() << "Found assign: dst[" << dstIndex
+  //                << "] = src[" << srcIndex << "]\n";
+  });
+}
+
+void collectMuxAssignGroups(mlir::ModuleOp module,
+                            std::map<Value, std::vector<MuxAssignBit>, ValueComparator> &muxGroups) {
+  module.walk([&](moore::ContinuousAssignOp assign) {
+    auto dst = assign.getDst();
+    auto src = assign.getSrc();
+
+    auto extractRef = dyn_cast<moore::ExtractRefOp>(dst.getDefiningOp());
+    auto orOp       = dyn_cast<moore::OrOp>(src.getDefiningOp());
+    if (!extractRef || !orOp)
+      return;
+
+    auto andA = dyn_cast<moore::AndOp>(orOp.getOperand(0).getDefiningOp());
+    auto andB = dyn_cast<moore::AndOp>(orOp.getOperand(1).getDefiningOp());
+    if (!andA || !andB)
+      return;
+
+    // Check sel and ~sel structure
+    Value sel = nullptr;
+    Value notSel = nullptr;
+
+    if (auto notOp = dyn_cast<moore::NotOp>(andB.getOperand(1).getDefiningOp())) {
+      sel = andA.getOperand(1);
+      notSel = notOp.getOperand();
+      if (sel != notSel)
+        return;
+    } else {
+      return;
+    }
+
+    auto extractA = dyn_cast<moore::ExtractOp>(andA.getOperand(0).getDefiningOp());
+    auto extractB = dyn_cast<moore::ExtractOp>(andB.getOperand(0).getDefiningOp());
+    if (!extractA || !extractB)
+      return;
+
+    auto dstAttr = extractRef->getAttrOfType<IntegerAttr>("lowBit");
+    auto aAttr = extractA->getAttrOfType<IntegerAttr>("lowBit");
+    auto bAttr = extractB->getAttrOfType<IntegerAttr>("lowBit");
+    if (!dstAttr || !aAttr || !bAttr)
+      return;
+
+    int bit = dstAttr.getInt();
+    if (bit != aAttr.getInt() || bit != bAttr.getInt())
+      return;
+
+    muxGroups[sel].push_back({assign, extractRef, orOp, andA, andB, extractA, extractB, bit});
   });
 }
 
@@ -262,20 +321,75 @@ void processAssignTree(AssignTree &assignTree) {
   }
 }
 
+void applyMuxGroupOptimization(std::map<Value, std::vector<MuxAssignBit>, ValueComparator> &muxGroups) {
+  for (auto &[sel, group] : muxGroups) {
+    if (group.size() < 2)
+      continue;
+
+    Value dest = group.front().extractRef.getOperand();
+    llvm::errs() << ">> Detected MUX group (" << group.size()
+                 << " bits) writing to " << dest << "\n";
+
+    llvm::sort(group, [](const MuxAssignBit &a, const MuxAssignBit &b) {
+      return a.bitIndex < b.bitIndex;
+    });
+
+    Value resultVector = group.front().extractRef.getOperand();
+    Value vectorA = group.front().extractA.getOperand();
+    Value vectorB = group.front().extractB.getOperand();
+    Location loc = group.front().assign.getLoc();
+    Type muxResultType = vectorA.getType();
+
+    OpBuilder builder(group.front().assign.getContext());
+    builder.setInsertionPoint(group.front().assign);
+
+    auto condOp = builder.create<moore::ConditionalOp>(loc, muxResultType, sel);
+
+    Block *thenBlock = new Block();
+    Block *elseBlock = new Block();
+
+    condOp.getRegion(0).push_back(thenBlock);
+    condOp.getRegion(1).push_back(elseBlock);
+
+    builder.setInsertionPointToStart(thenBlock);
+    builder.create<moore::YieldOp>(loc, vectorA);
+
+    builder.setInsertionPointToStart(elseBlock);
+    builder.create<moore::YieldOp>(loc, vectorB);
+
+    builder.setInsertionPointAfter(condOp);
+
+    builder.create<moore::ContinuousAssignOp>(loc, resultVector, condOp.getResult());
+
+    for (auto &bit : group) {
+      bit.assign.erase();
+      bit.extractRef.erase();
+      bit.orOp.erase();
+      bit.andSelA.erase();
+      bit.andNotSelB.erase();
+      bit.extractA.erase();
+      bit.extractB.erase();
+    }
+  }
+}
+
 struct SimpleVectorizationPass
     : public mlir::PassWrapper<SimpleVectorizationPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
   void runOnOperation() override {
-  auto module = getOperation();
-  llvm::errs() << "Running SimpleVectorizationPass...\n";
+    auto module = getOperation();
+    llvm::errs() << "Running SimpleVectorizationPass...\n";
 
-  AssignTree assignTree;
+    std::map<Value, std::vector<MuxAssignBit>, ValueComparator> muxGroups;
+    collectMuxAssignGroups(module, muxGroups);
+    applyMuxGroupOptimization(muxGroups);
 
-  collectAssigns(module, assignTree);
-  processAssignTree(assignTree);
+    AssignTree assignTree;
+    collectAssigns(module, assignTree);
+    processAssignTree(assignTree);
 
-  llvm::errs() << "SimpleVectorizationPass completed.\n";
-}
+    llvm::errs() << "SimpleVectorizationPass completed.\n";
+  }
 
   StringRef getArgument() const override { return "simple-vec"; }
 
@@ -283,7 +397,7 @@ struct SimpleVectorizationPass
     return "Simple Vectorization Pass";
   }
 };
-} 
+}
 
 extern "C" ::mlir::PassPluginLibraryInfo mlirGetPassPluginInfo() {
     return {
