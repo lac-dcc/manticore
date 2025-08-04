@@ -2,3 +2,4 @@
 jgproject
 src/passes/Vectorization/VectorizePassOld.cpp
 src/passes/Vectorization/Makefile
+scripts
