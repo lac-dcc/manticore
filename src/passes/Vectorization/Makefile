@@ -6,6 +6,7 @@ LLVM_CONFIG := $(LLVM_PREFIX)/bin/llvm-config
 CLANG       := clang++
 
 CXXFLAGS    += -fPIC -shared -std=c++17 -O2 -fvisibility=default \
+               -I./include \
                -I$(MLIR_PREFIX)/include \
                -I$(LLVM_PREFIX)/include \
                -I$(MLIR_PREFIX)/tools/mlir/include \
@@ -16,15 +17,28 @@ CXXFLAGS    += -fPIC -shared -std=c++17 -O2 -fvisibility=default \
 
 LDFLAGS     += `$(LLVM_CONFIG) --ldflags --libs core Support` \
                -Wl,-rpath,$(LLVM_PREFIX)/lib -L$(LLVM_PREFIX)/lib \
-               -lMLIRIR -lMLIRPass -lMLIRSupport -lMLIRParser -lMLIRTransforms
+               -L$(CIRCT_PREFIX)/build/lib \
+               -lMLIRIR -lMLIRPass -lMLIRSupport -lMLIRParser -lMLIRTransforms \
+               -lCIRCTComb -lCIRCTMoore -lCIRCTSV -lCIRCTHW
+
+SOURCES = lib/VectorizePass.cpp \
+          lib/AssignmentBasedVectorization.cpp \
+          lib/StructuralPatternVectorization.cpp
+
+OBJECTS = $(SOURCES:.cpp=.o)
 
 TARGET = VectorizePass.so
-SRC    = VectorizePass.cpp
 
 all: $(TARGET)
 
-$(TARGET): $(SRC)
+$(TARGET): $(OBJECTS)
+	@echo "Ligando para criar o $@..."
 	$(CLANG) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
+%.o: %.cpp
+	@echo "Compilando $<..."
+	$(CLANG) $(CXXFLAGS) -c $< -o $@
+
 clean:
-	rm -f $(TARGET)
+	@echo "Limpando arquivos gerados..."
+	rm -f $(TARGET) $(OBJECTS)
