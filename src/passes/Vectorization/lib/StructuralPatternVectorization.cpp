@@ -145,72 +145,33 @@ void collectAndGroupPatterns(ModuleOp module, PatternGroupMap &groups) {
  * @brief Checks if a group of patterns is contiguous and can be vectorized.
  */
 bool isValidForVectorization(std::vector<StructuralPatternInfo> &group) {
-    if (group.size() < 2) return false;
+    if (group.size() < 2)
+        return false;
 
-    // Sort by the destination bit index to facilitate the contiguity check.
+    // Ordena pela posição do bit destino (decrescente)
     llvm::sort(group, [](const StructuralPatternInfo &a, const StructuralPatternInfo &b) {
         return a.bitIndex > b.bitIndex;
     });
 
-    // Check if the destination bits are contiguous (e.g., 7, 6, 5, ...)
+    // Verifica se os bits destino são contíguos
     for (size_t i = 1; i < group.size(); ++i) {
-        if (group[i].bitIndex != group[i - 1].bitIndex - 1) return false;
+        if (group[i].bitIndex != group[i - 1].bitIndex - 1)
+            return false;
     }
-    
-    // If there are sliced inputs, check if they are also contiguous.
-    if (!group.front().slicedInputs.empty()) {
-        size_t numSlicedInputs = group.front().slicedInputs.size();
-        for (size_t j = 0; j < numSlicedInputs; ++j) {
-            for (size_t i = 1; i < group.size(); ++i) {
-                if (group[i].slicedInputs[j].bitIndex != group[i-1].slicedInputs[j].bitIndex - 1) return false;
-            }
+
+    // Verifica contiguidade nos slicedInputs (se houver)
+    size_t numSlices = group.front().slicedInputs.size();
+    for (size_t j = 0; j < numSlices; ++j) {
+        for (size_t i = 1; i < group.size(); ++i) {
+            if (group[i].slicedInputs[j].vector != group[0].slicedInputs[j].vector)
+                return false;
+            if (group[i].slicedInputs[j].bitIndex != group[i - 1].slicedInputs[j].bitIndex - 1)
+                return false;
         }
     }
 
     return true;
 }
-
-/**
- * @brief Vectorizes a specific group that corresponds to a 2-to-1 MUX.
- *
- * Replaces the pattern with an optimized `moore.conditional_op`.
- */
-// void vectorizeMuxGroup(std::vector<StructuralPatternInfo> &group, OpBuilder &builder) {
-//     if (group.empty()) return;
-
-//     Location loc = group.front().assignOp.getLoc();
-//     Value dstVector = cast<ExtractRefOp>(group.front().assignOp.getDst().getDefiningOp()).getInput();
-//     Type dstValueType = cast<RefType>(dstVector.getType()).getNestedType();
-
-//     // In a mux, we expect 2 sliced inputs (A and B) and 1 uniform input (SEL).
-//     Value operandA = group.front().slicedInputs[0].vector;
-//     Value operandB = group.front().slicedInputs[1].vector;
-//     Value sel = group.front().uniformOperands[0];
-    
-//     // Create the conditional operation
-//     auto condOp = builder.create<moore::ConditionalOp>(loc, dstValueType, sel);
-    
-//     Block *thenBlock = builder.createBlock(&condOp.getTrueRegion());
-//     builder.setInsertionPointToEnd(thenBlock);
-//     builder.create<moore::YieldOp>(loc, operandA);
-
-//     Block *elseBlock = builder.createBlock(&condOp.getFalseRegion());
-//     builder.setInsertionPointToEnd(elseBlock);
-//     builder.create<moore::YieldOp>(loc, operandB);
-
-//     builder.setInsertionPointAfter(condOp);
-//     builder.create<moore::ContinuousAssignOp>(loc, dstVector, condOp.getResult());
-
-//     // Clean up the old operations
-//     for (auto &info : group) {
-//         Operation* assign = info.assignOp;
-//         Value dst = assign->getOperand(0); // The ExtractRefOp
-//         assign->erase();
-//         if (dst.getDefiningOp() && dst.getDefiningOp()->use_empty()) {
-//             dst.getDefiningOp()->erase();
-//         }
-//     }
-// }
 
 /**
  * @brief Vectorizes a generic group of patterns.
@@ -293,46 +254,13 @@ void vectorizePatternGroup(std::vector<StructuralPatternInfo> &group, OpBuilder 
 }
 }
 
-// void processStructuralPatterns(mlir::ModuleOp module, VectorizationStatistics &stats) {
-//     PatternGroupMap patternGroups;
-//     collectAndGroupPatterns(module, patternGroups);
-    
-//     OpBuilder builder(module.getContext());
-
-//     const std::string muxSignature = "moore.or(moore.and(S<0>,U<0>),moore.and(S<1>,moore.not(U<0>)))";
-
-//     for (auto &[sig, infos] : patternGroups) {
-//         // Sub-group by destination vector, as the same pattern can apply
-//         // to multiple different destination vectors.
-//         std::map<Value, std::vector<StructuralPatternInfo>, ValueComparator> subGroups;
-//         for (auto& info : infos) {
-//             Value dstVector = cast<ExtractRefOp>(info.assignOp.getDst().getDefiningOp()).getInput();
-//             subGroups[dstVector].push_back(info);
-//         }
-
-//         for (auto &[dstVec, subGroup] : subGroups) {
-//             if (isValidForVectorization(subGroup)) {
-//                 builder.setInsertionPoint(subGroup.front().assignOp);
-
-//                 if (sig.structure == muxSignature) {
-//                     vectorizeMuxGroup(subGroup, builder);
-//                 } else {
-//                     vectorizePatternGroup(subGroup, builder);
-//                 }
-//                 stats.increment("STRUCTURAL");
-//             }
-//         }
-//     }
-// }
-
 void processStructuralPatterns(mlir::ModuleOp module, VectorizationStatistics &stats) {
     PatternGroupMap patternGroups;
     collectAndGroupPatterns(module, patternGroups);
-    
+
     OpBuilder builder(module.getContext());
 
     for (auto &[sig, infos] : patternGroups) {
-        // Sub-grouping by destination vector remains a good practice.
         std::map<Value, std::vector<StructuralPatternInfo>, ValueComparator> subGroups;
         for (auto& info : infos) {
             Value dstVector = cast<ExtractRefOp>(info.assignOp.getDst().getDefiningOp()).getInput();
@@ -340,13 +268,19 @@ void processStructuralPatterns(mlir::ModuleOp module, VectorizationStatistics &s
         }
 
         for (auto &[dstVec, subGroup] : subGroups) {
-            if (isValidForVectorization(subGroup)) {
-                builder.setInsertionPoint(subGroup.front().assignOp);
+            // Trava de segurança: precisa cobrir o vetor todo
+            auto vecType = cast<RefType>(dstVec.getType()).getNestedType();
+            if (!isa<IntType>(vecType)) continue;
 
-                vectorizePatternGroup(subGroup, builder);
-                
-                stats.increment("STRUCTURAL");
-            }
+            int totalWidth = cast<IntType>(vecType).getWidth();
+            if ((int)subGroup.size() != totalWidth) continue;
+
+            // Validação semântica do padrão
+            if (!isValidForVectorization(subGroup)) continue;
+
+            builder.setInsertionPoint(subGroup.front().assignOp);
+            vectorizePatternGroup(subGroup, builder);
+            stats.increment("STRUCTURAL");
         }
     }
 }
