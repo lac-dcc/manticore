@@ -148,18 +148,18 @@ bool isValidForVectorization(std::vector<StructuralPatternInfo> &group) {
     if (group.size() < 2)
         return false;
 
-    // Ordena pela posição do bit destino (decrescente)
+    // Sort by the position of the destination bit (descending)
     llvm::sort(group, [](const StructuralPatternInfo &a, const StructuralPatternInfo &b) {
         return a.bitIndex > b.bitIndex;
     });
 
-    // Verifica se os bits destino são contíguos
+    // Checks if destination bits are contiguous
     for (size_t i = 1; i < group.size(); ++i) {
         if (group[i].bitIndex != group[i - 1].bitIndex - 1)
             return false;
     }
 
-    // Verifica contiguidade nos slicedInputs (se houver)
+    // Checks contiguity in slicedInputs (if any)
     size_t numSlices = group.front().slicedInputs.size();
     for (size_t j = 0; j < numSlices; ++j) {
         for (size_t i = 1; i < group.size(); ++i) {
@@ -268,14 +268,14 @@ void processStructuralPatterns(mlir::ModuleOp module, VectorizationStatistics &s
         }
 
         for (auto &[dstVec, subGroup] : subGroups) {
-            // Trava de segurança: precisa cobrir o vetor todo
+            // Safety lock: must cover the entire vector
             auto vecType = cast<RefType>(dstVec.getType()).getNestedType();
             if (!isa<IntType>(vecType)) continue;
 
             int totalWidth = cast<IntType>(vecType).getWidth();
             if ((int)subGroup.size() != totalWidth) continue;
 
-            // Validação semântica do padrão
+            // Semantic validation of the pattern
             if (!isValidForVectorization(subGroup)) continue;
 
             builder.setInsertionPoint(subGroup.front().assignOp);
