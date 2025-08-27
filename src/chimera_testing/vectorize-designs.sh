@@ -1,8 +1,18 @@
-for design in /home/ullas/manticore/manticore/scripts/vectorizable-designs/default/*.v; do
+
+initial_number=27191
+other_number=10000
+
+for design in /home/ullas/manticore/chimera/database/*.v; do
+
   echo $design
-  ./run-vectorization.sh $design
-  rm -rf *.mlir
+  number=$(basename "$design" | cut -d'_' -f1) 
+
+  if [[ $number -lt $other_number ]]; then
+    timeout 1m ./run-vectorization.sh $design
+    rm  *.mlir
+  fi
 done
+
 
 
 

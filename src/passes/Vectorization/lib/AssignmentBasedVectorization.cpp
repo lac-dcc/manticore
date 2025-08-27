@@ -199,6 +199,8 @@ void processAssignTreeInternal(AssignTree &assignTree, VectorizationStatistics &
                     stats.increment("MIX");
                     vectorizeMixGroup(group, builder);
                 }
+
+                stats.increment_vector_size(group.size());
             }
         }
     }

@@ -1,37 +1,34 @@
-#!/bin/bash
+BASE_NAME="test"
 
-# Base file name (without extension)
-BASE_NAME="test2"
-
-# Step 1: Convert Verilog to IR Moore
-echo "Converting Verilog to IR Moore..."
+# Step 1: Verilog -> Moore
+echo "Step 1: Verilog -> Moore"
 circt-verilog --ir-moore ${BASE_NAME}.sv -o ${BASE_NAME}.moore.mlir
 
-# Step 2: Run the vectorization pass on IR Moore
-echo "Running vectorization pass..."
+# Step 2: Run the custom vectorization pass
+echo "Step 2: Vectorization"
 circt-opt ${BASE_NAME}.moore.mlir \
   --pass-pipeline="builtin.module(simple-vec)" \
   --load-pass-plugin=./VectorizePass.so \
   -o ${BASE_NAME}.after_pass.mlir
 
-# Step 3: Convert IR Moore to IR Core
-echo "Converting IR Moore to IR Core..."
-circt-opt --convert-moore-to-core ${BASE_NAME}.after_pass.mlir -o ${BASE_NAME}.core.mlir
+# Step 3: Moore -> Core
+echo "Step 3: Moore -> Core"
+circt-opt --convert-moore-to-core ${BASE_NAME}.after_pass.mlir \
+  -o ${BASE_NAME}.core.mlir
 
-# Step 4: Clean the IR with LLHD passes and optimizations
-echo "Cleaning and optimizing IR..."
-circt-opt \
-  --llhd-desequentialize \
-  --llhd-hoist-signals \
+# Step 4: Fix LLHD ops, then clean up and optimize the IR (NEW APPROACH)
+echo "Step 4: Fixing LLHD and cleaning the IR"
+circt-opt ${BASE_NAME}.core.mlir \
   --llhd-sig2reg \
-  --llhd-mem2reg \
-  --llhd-process-lowering \
+  --hw-cleanup \
   --cse \
   --canonicalize \
-  ${BASE_NAME}.core.mlir -o ${BASE_NAME}.cleaned.mlir
+  --hw-legalize-modules \
+  --prettify-verilog \
+  -o ${BASE_NAME}.cleaned.mlir
 
-# Step 5: Generate final Verilog
-echo "Generating final Verilog..."
+# Step 5: Generate Verilog
+echo "Step 5: Generating Final Verilog"
 firtool ${BASE_NAME}.cleaned.mlir --verilog -o ${BASE_NAME}_final.v
 
 echo "Pipeline completed! Verilog generated in ${BASE_NAME}_final.v"

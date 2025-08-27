@@ -27,6 +27,8 @@ circt-opt \
 
 file_name=$(basename "$file_path")
 
+# firtool ${placeholder}.cleaned.mlir --verilog -o "/home/ullas/manticore/manticore/designs/vectorized/${file_name}"
+# firtool ${placeholder}.cleaned.mlir --verilog -o "${file_name}"
 
-firtool ${placeholder}.cleaned.mlir --verilog -o "/home/ullas/manticore/manticore/scripts/vectorizable-designs/vectorized/${file_name}"
+rm *.mlir
 

@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 def designs_list():
     designs = []
-    path = "/home/ullas/manticore/manticore/scripts/vectorizable-designs/vectorized/"
+    path = "/home/ullas/manticore/manticore/designs/real-vectorized/"
 
     for file in os.listdir(path):
         designs.append(file)
@@ -13,7 +13,7 @@ def designs_list():
     return designs
 
 def run_analysis(file, vectorized):
-    path = "../../scripts/vectorizable-designs/vectorized/" if vectorized else  "../../scripts/vectorizable-designs/default/"
+    path = "../../designs/vectorized/" if vectorized else  "../../designs/non-vectorized/"
     path += file
 
     tcl_file_content = f'analyze -sv {path}\nelaborate\nexit 0'
@@ -44,13 +44,18 @@ def get_data():
 
     for design in tqdm(designs, desc="Analise dos Designs"):
         data = get_data_from_design(design)
+        data.insert(0, design)
         results.append(data)
 
 
-    df = pd.DataFrame(results, columns=["time-non-vectorized", "memory-non-vectorized", "time-vectorized", "memory-vectorized"])
-    df.to_csv("resultados.csv")
+    df = pd.DataFrame(results, columns=["file", "time-non-vectorized", "memory-non-vectorized", "time-vectorized", "memory-vectorized"])
+    # df.to_csv("resultados.csv")
 
 
-get_data()
+# get_data()
 
 
+
+vectorized = True
+s = "../../designs/vectorized/" if vectorized else  "../../designs/non-vectorized/"
+print(s)
