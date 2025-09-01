@@ -12,12 +12,14 @@
 #include <llvm/ADT/DenseMap.h>
 #include <llvm/Support/Casting.h>
 #include <mlir/IR/MLIRContext.h>
+#include <set>
 #include <utility>
 
 using namespace mlir;
 using namespace circt;
 using namespace moore;
 using namespace comb;
+using namespace hw;
 
 llvm::DenseMap<mlir::Value, std::pair<int,int>> get_assignments(mlir::ModuleOp module) {
     llvm::DenseMap<mlir::Value, std::pair<int,int>> assignments;
@@ -131,24 +133,45 @@ void vectorize(hw::HWModuleOp m) {
 
 void apply_vectorization(mlir::ModuleOp module) {
   SmallVector<hw::HWModuleOp, 8> mods;
-  for (auto m : module.getOps<hw::HWModuleOp>())
-    mods.push_back(m);
+  for (auto m : module.getOps<hw::HWModuleOp>()) mods.push_back(m);
 
-  for (auto m : mods)
-    vectorize(m);    
+  for (auto m : mods) vectorize(m);    
 }
 
 bool linear_vectorization_detected(mlir::ModuleOp module, llvm::DenseMap<mlir::Value, std::vector<std::pair<mlir::Value,int>>>& bit_vectors) {
+  bool linear_vectorization = true;
+
+  module.walk([&](hw::OutputOp op) {
+    mlir::Value lhs = op.getOutputs()[0]; 
+    unsigned bit_width = llvm::cast<mlir::IntegerType>(lhs.getType()).getWidth();
+
+    std::set<int> assigned_bits;
+    for(int i = 0; i < bit_width; i++) assigned_bits.insert(i);
     
+    std::vector<std::pair<mlir::Value,int>> bit_vector = bit_vectors[lhs];
+
+    for(auto [value, index] : bit_vector) {
+      if(assigned_bits.find(index) != assigned_bits.end()) {
+        assigned_bits.erase(index);
+      }
+    }
+
+    if(assigned_bits.size() != 0) linear_vectorization = false;
+
+  });
+
+  return linear_vectorization;
 }
 
 
-void processAssignTree(mlir::ModuleOp module, VectorizationStatistics &stats) {
+void performVectorization(mlir::ModuleOp module, VectorizationStatistics &stats) {
   llvm::DenseMap<mlir::Value, std::pair<int,int>> extracted_bits = get_assignments(module);
   llvm::DenseMap<mlir::Value, std::pair<mlir::Value,int>> concatenations = get_bit_vectors(module, extracted_bits);
 
   llvm::DenseMap<mlir::Value, std::vector<std::pair<mlir::Value,int>>> final = compute_ors_ands(module, concatenations);
 
-  apply_vectorization(module);
+  if(linear_vectorization_detected(module, final)) {
+    apply_vectorization(module);
+  }
 }
 
