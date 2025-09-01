@@ -6,4 +6,3 @@ module linear(output wire [3:0] out, input wire [3:0] in);
 
 endmodule
 
-

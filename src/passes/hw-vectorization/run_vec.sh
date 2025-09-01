@@ -18,20 +18,20 @@ circt-opt ${BASE_NAME}.hw.mlir \
 # echo "Converting IR Moore to IR Core..."
 # circt-opt --convert-moore-to-core ${BASE_NAME}.after_pass.mlir -o ${BASE_NAME}.core.mlir
 #
-# # Step 4: Clean the IR with LLHD passes and optimizations
-# echo "Cleaning and optimizing IR..."
-# circt-opt \
-#   --llhd-desequentialize \
-#   --llhd-hoist-signals \
-#   --llhd-sig2reg \
-#   --llhd-mem2reg \
-#   --llhd-process-lowering \
-#   --cse \
-#   --canonicalize \
-#   ${BASE_NAME}.core.mlir -o ${BASE_NAME}.cleaned.mlir
-#
-# # Step 5: Generate final Verilog
-# echo "Generating final Verilog..."
-# firtool ${BASE_NAME}.cleaned.mlir --verilog -o ${BASE_NAME}_final.v
-#
-# echo "Pipeline completed! Verilog generated in ${BASE_NAME}_final.v"
+# Step 4: Clean the IR with LLHD passes and optimizations
+echo "Cleaning and optimizing IR..."
+circt-opt \
+  --llhd-desequentialize \
+  --llhd-hoist-signals \
+  --llhd-sig2reg \
+  --llhd-mem2reg \
+  --llhd-process-lowering \
+  --cse \
+  --canonicalize \
+  ${BASE_NAME}.after_pass.mlir -o ${BASE_NAME}.cleaned.mlir
+
+# Step 5: Generate final Verilog
+echo "Generating final Verilog..."
+firtool ${BASE_NAME}.cleaned.mlir --verilog -o ${BASE_NAME}_final.v
+
+echo "Pipeline completed! Verilog generated in ${BASE_NAME}_final.v"
