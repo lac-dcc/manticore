@@ -11,6 +11,7 @@
 
 #include <llvm/ADT/DenseMap.h>
 #include <llvm/Support/Casting.h>
+#include <mlir/IR/MLIRContext.h>
 #include <utility>
 
 using namespace mlir;
@@ -106,12 +107,39 @@ llvm::DenseMap<mlir::Value, std::vector<std::pair<mlir::Value,int>>> compute_ors
   return bit_vectors;
 }
 
-void apply_linear_vectorization(mlir::ModuleOp module, llvm::DenseMap<mlir::Value, std::vector<std::pair<mlir::Value,int>>>& bit_vectors) {
-  module.walk([&](mlir::OutputOp op) {
-    mlir::Value lhs = op.getInputs()[0];
+void vectorize(hw::HWModuleOp m) {
+  Block &body = m.getBody().front();
+  OpBuilder b(m.getContext());
+  Location loc = m.getLoc();
 
+  BlockArgument in0 = body.getArgument(0);
 
-  });
+  for (Operation &op : body) {
+    for (Value res : op.getResults()) {
+      if (res != in0)               
+        res.replaceAllUsesWith(in0);
+    }
+  }
+
+  if (Operation *term = body.getTerminator()) term->erase();
+
+  while (!body.empty()) body.back().erase();
+
+  b.setInsertionPointToEnd(&body);
+  b.create<hw::OutputOp>(loc, ValueRange{in0}); 
+}
+
+void apply_vectorization(mlir::ModuleOp module) {
+  SmallVector<hw::HWModuleOp, 8> mods;
+  for (auto m : module.getOps<hw::HWModuleOp>())
+    mods.push_back(m);
+
+  for (auto m : mods)
+    vectorize(m);    
+}
+
+bool linear_vectorization_detected(mlir::ModuleOp module, llvm::DenseMap<mlir::Value, std::vector<std::pair<mlir::Value,int>>>& bit_vectors) {
+    
 }
 
 
@@ -120,5 +148,7 @@ void processAssignTree(mlir::ModuleOp module, VectorizationStatistics &stats) {
   llvm::DenseMap<mlir::Value, std::pair<mlir::Value,int>> concatenations = get_bit_vectors(module, extracted_bits);
 
   llvm::DenseMap<mlir::Value, std::vector<std::pair<mlir::Value,int>>> final = compute_ors_ands(module, concatenations);
+
+  apply_vectorization(module);
 }
 
