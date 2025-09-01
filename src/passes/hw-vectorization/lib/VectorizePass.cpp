@@ -52,7 +52,7 @@ struct SimpleVectorizationPass
         mlir::ModuleOp module = getOperation();
         
         // Run the first vectorization strategy: assignment-based.
-        processAssignTree(module, stats);
+        performVectorization(module, stats);
         // Run the second vectorization strategy: structural pattern matching.
         // processStructuralPatterns(module, stats);
         
