@@ -166,8 +166,6 @@ bool linear_vectorization_detected(mlir::ModuleOp module, llvm::DenseMap<mlir::V
 
 
 void performVectorization(mlir::ModuleOp module, VectorizationStatistics &stats) {
-
-
   llvm::DenseMap<mlir::Value, std::pair<int,int>> extracted_bits = get_assignments(module);
   llvm::DenseMap<mlir::Value, std::pair<mlir::Value,int>> concatenations = get_bit_vectors(module, extracted_bits);
 
