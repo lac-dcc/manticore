@@ -24,7 +24,8 @@ LDFLAGS     += `$(LLVM_CONFIG) --ldflags --libs core Support` \
 
 SOURCES = lib/VectorizePass.cpp \
           lib/AssignmentBasedVectorization.cpp \
-          lib/StructuralPatternVectorization.cpp
+          lib/StructuralPatternVectorization.cpp \
+					lib/BitArray.cpp
 
 OBJECTS = $(SOURCES:.cpp=.o)
 

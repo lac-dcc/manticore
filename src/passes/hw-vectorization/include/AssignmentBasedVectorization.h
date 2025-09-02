@@ -9,6 +9,8 @@ class OpBuilder;
 } // namespace mlir
 
 
+
+
 void performVectorization(mlir::ModuleOp module, VectorizationStatistics &stats);
 
 #endif // MANTICORE_ASSIGNMENT_BASED_VECTORIZATION_H
