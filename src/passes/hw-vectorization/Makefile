@@ -2,7 +2,6 @@ LLVM_PREFIX ?= /usr/local
 MLIR_PREFIX ?= /usr/local
 CIRCT_PREFIX ?= /home/ullas/manticore/circt
 
-
 LLVM_CONFIG := $(LLVM_PREFIX)/bin/llvm-config
 CLANG       := clang++
 
@@ -25,11 +24,13 @@ LDFLAGS     += `$(LLVM_CONFIG) --ldflags --libs core Support` \
 SOURCES = lib/VectorizePass.cpp \
           lib/AssignmentBasedVectorization.cpp \
           lib/StructuralPatternVectorization.cpp \
-					lib/BitArray.cpp
+          lib/BitArray.cpp
 
-OBJECTS = $(SOURCES:.cpp=.o)
+OBJDIR = build
+# remove o caminho (lib/...), deixando só o nome do arquivo .o dentro de build/
+OBJECTS = $(patsubst lib/%.cpp,$(OBJDIR)/%.o,$(SOURCES))
 
-TARGET = VectorizePass.so
+TARGET = $(OBJDIR)/VectorizePass.so
 
 all: $(TARGET)
 
@@ -37,10 +38,12 @@ $(TARGET): $(OBJECTS)
 	@echo "Ligando para criar o $@..."
 	$(CLANG) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
-%.o: %.cpp
+$(OBJDIR)/%.o: lib/%.cpp
+	@mkdir -p $(OBJDIR)
 	@echo "Compilando $<..."
 	$(CLANG) $(CXXFLAGS) -c $< -o $@
 
 clean:
 	@echo "Limpando arquivos gerados..."
-	rm -f $(TARGET) $(OBJECTS)
+	rm -rf $(OBJDIR)
+

@@ -11,7 +11,7 @@ circt-verilog --ir-hw ${BASE_NAME}.sv -o ${BASE_NAME}.hw.mlir
 echo "Running vectorization pass..."
 circt-opt ${BASE_NAME}.hw.mlir \
   --pass-pipeline="builtin.module(simple-vec)" \
-  --load-pass-plugin=./VectorizePass.so \
+  --load-pass-plugin=./build/VectorizePass.so \
   -o ${BASE_NAME}.after_pass.mlir
 
 # Step 3: Convert IR Moore to IR Core
