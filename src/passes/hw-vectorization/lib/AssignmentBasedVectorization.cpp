@@ -1,5 +1,5 @@
 #include "AssignmentBasedVectorization.h"
-
+#include "../include/BitArray.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -20,6 +20,7 @@ using namespace circt;
 using namespace moore;
 using namespace comb;
 using namespace hw;
+
 
 llvm::DenseMap<mlir::Value, std::pair<int,int>> get_assignments(mlir::ModuleOp module) {
     llvm::DenseMap<mlir::Value, std::pair<int,int>> assignments;
@@ -165,6 +166,8 @@ bool linear_vectorization_detected(mlir::ModuleOp module, llvm::DenseMap<mlir::V
 
 
 void performVectorization(mlir::ModuleOp module, VectorizationStatistics &stats) {
+
+
   llvm::DenseMap<mlir::Value, std::pair<int,int>> extracted_bits = get_assignments(module);
   llvm::DenseMap<mlir::Value, std::pair<mlir::Value,int>> concatenations = get_bit_vectors(module, extracted_bits);
 
