@@ -22,7 +22,6 @@ LDFLAGS     += `$(LLVM_CONFIG) --ldflags --libs core Support` \
                -lCIRCTComb -lCIRCTMoore -lCIRCTSV -lCIRCTHW
 
 SOURCES = lib/VectorizePass.cpp \
-          lib/AssignmentBasedVectorization.cpp \
           lib/StructuralPatternVectorization.cpp \
           lib/Vectorizer.cpp \
           lib/BitArray.cpp

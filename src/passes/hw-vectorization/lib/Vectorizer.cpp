@@ -1,25 +1,21 @@
 #include "../include/Vectorizer.h"
 
-vectorizer::vectorizer(mlir::ModuleOp module): module(module) {}
+vectorizer::vectorizer(hw::HWModuleOp module): module(module) {}
 
 void vectorizer::vectorize() {
   process_extract_ops();
   process_concat_ops();
   process_logical_ops();
 
-  // TODO: arrumar isso aqui. Fazer com que o vetorizador vetorize apenas um modulo
-  SmallVector<hw::HWModuleOp, 8> mods;
-  for (auto m : module.getOps<hw::HWModuleOp>()) mods.push_back(m);
-
   if(linear_vectorization_detected()) {
-    apply_linear_vectorization(mods[0]);
+    apply_linear_vectorization();
   }
 }
 
-void vectorizer::apply_linear_vectorization(hw::HWModuleOp hw_module) {
-  Block &body = hw_module.getBody().front();
-  OpBuilder b(hw_module.getContext());
-  Location loc = hw_module.getLoc();
+void vectorizer::apply_linear_vectorization() {
+  Block &body = module.getBody().front();
+  OpBuilder b(module.getContext());
+  Location loc = module.getLoc();
 
   BlockArgument in0 = body.getArgument(0);
 
