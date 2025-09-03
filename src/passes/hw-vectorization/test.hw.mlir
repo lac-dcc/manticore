@@ -1,5 +1,5 @@
 module {
-  hw.module @linear(in %in : i4, out out : i4) {
+  hw.module @linear(in %in : i4, in %in2 : i4, out out : i4) {
     %c0_i2 = hw.constant 0 : i2
     %false = hw.constant false
     %c7_i4 = hw.constant 7 : i4

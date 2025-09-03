@@ -5,13 +5,13 @@
 #include <llvm/ADT/DenseMap.h>
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/Hashing.h"
+#include "llvm/Support/raw_ostream.h"
 
 struct bit {
   mlir::Value source;
-  mlir::Value value;
   int index;
 
-  bit(mlir::Value source, mlir::Value value, int index);
+  bit(mlir::Value source, int index);
   bit();
   bit(const bit& other);
 
@@ -24,18 +24,24 @@ const int INDEX_SENTINEL_VALUE = -1;
 const int TOMBSTONE_SENTINEL_VALUE = -1;
 
 namespace llvm {
+
+inline hash_code bit_hash_code(const bit& b) {
+  return llvm::hash_combine(b.source, b.index);
+}
+
 template<>
 struct DenseMapInfo<bit> {
   static inline bit getEmptyKey() {
-    return bit(llvm::DenseMapInfo<mlir::Value>::getEmptyKey(), llvm::DenseMapInfo<mlir::Value>::getEmptyKey(), INDEX_SENTINEL_VALUE); 
+    return bit(llvm::DenseMapInfo<mlir::Value>::getEmptyKey(), INDEX_SENTINEL_VALUE); 
   }
   static inline bit getTombstoneKey() {
-    return bit(llvm::DenseMapInfo<mlir::Value>::getEmptyKey(), llvm::DenseMapInfo<mlir::Value>::getEmptyKey(), TOMBSTONE_SENTINEL_VALUE); 
+    return bit(llvm::DenseMapInfo<mlir::Value>::getEmptyKey(), TOMBSTONE_SENTINEL_VALUE); 
   }
 
   static unsigned getHashValue(const bit &A) {
-    return llvm::DenseMapInfo<mlir::Value>::getHashValue(A.value);  
+    return static_cast<unsigned>(bit_hash_code(A));  
   }
+
   static bool isEqual(const bit& A, const bit& B) {
     return A == B;
   }
@@ -45,6 +51,12 @@ struct DenseMapInfo<bit> {
 struct bit_array {
   llvm::DenseSet<bit> bits;
   mlir::Value value;
+
+  bit_array(llvm::DenseSet<bit>& bits, mlir::Value value);
+  bit_array(const bit_array& other);
+  bit_array();
+
+  void debug();
 };
 
 
