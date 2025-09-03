@@ -6,6 +6,7 @@
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/Support/raw_ostream.h"
+#include <set>
 
 struct bit {
   mlir::Value source;
@@ -50,11 +51,16 @@ struct DenseMapInfo<bit> {
 
 struct bit_array {
   llvm::DenseSet<bit> bits;
-  mlir::Value value;
 
-  bit_array(llvm::DenseSet<bit>& bits, mlir::Value value);
+  bit_array(llvm::DenseSet<bit>& bits);
   bit_array(const bit_array& other);
   bit_array();
+  static bit_array unite(const bit_array& a, const bit_array& b);
+
+  bool all_bit_have_same_source();
+
+  bool is_contiguous(int size);
+
 
   void debug();
 };

@@ -9,6 +9,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include "circt/Dialect/Comb/CombOps.h"
 
+#include "../include/Vectorizer.h"
+
 #include <llvm/ADT/DenseMap.h>
 #include <llvm/Support/Casting.h>
 #include <mlir/IR/MLIRContext.h>
@@ -41,24 +43,24 @@ llvm::DenseMap<mlir::Value, std::pair<int,int>> get_assignments(mlir::ModuleOp m
     return assignments;
 }
 
-llvm::DenseMap<mlir::Value, bit_array> get_bit_arrays(mlir::ModuleOp module) {
-  llvm::DenseMap<mlir::Value, bit_array> bit_arrays;
-
-  module.walk([&](comb::ExtractOp op) {
-    mlir::Value input = op.getInput();
-    
-    mlir::Value result = op.getResult();
-    int index = op.getLowBit();
-
-    llvm::DenseSet<bit> bit_dense_set;
-    bit_dense_set.insert(bit(input, index));
-
-    bit_array bits(bit_dense_set, result);
-    bit_arrays.insert({result, bits});
-  });
-
-  return bit_arrays;
-}
+// llvm::DenseMap<mlir::Value, bit_array> get_bit_arrays(mlir::ModuleOp module) {
+//   llvm::DenseMap<mlir::Value, bit_array> bit_arrays;
+//
+//   module.walk([&](comb::ExtractOp op) {
+//     mlir::Value input = op.getInput();
+//
+//     mlir::Value result = op.getResult();
+//     int index = op.getLowBit();
+//
+//     llvm::DenseSet<bit> bit_dense_set;
+//     bit_dense_set.insert(bit(input, index));
+//
+//     bit_array bits(bit_dense_set, result);
+//     bit_arrays.insert({result, bits});
+//   });
+//
+//   return bit_arrays;
+// }
 
 llvm::DenseMap<mlir::Value, std::pair<mlir::Value, int>> get_bit_vectors(mlir::ModuleOp module, llvm::DenseMap<mlir::Value, std::pair<int,int>>& extracted_bits) {
   llvm::DenseMap<mlir::Value, std::pair<mlir::Value, int>> concatenations;
@@ -196,10 +198,7 @@ void performVectorization(mlir::ModuleOp module, VectorizationStatistics &stats)
   // }
   //
 
-  auto bas = get_bit_arrays(module);
-
-  for(auto [v, ba] : bas) {
-    ba.debug();
-  }
+  vectorizer v(module);
+  v.vectorize(); 
 }
 

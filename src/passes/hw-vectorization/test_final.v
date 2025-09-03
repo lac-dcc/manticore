@@ -5,16 +5,6 @@ module linear(	// test.cleaned.mlir:2:3
   output [3:0] out	// test.cleaned.mlir:2:52
 );
 
-  wire _in_3;	// test.cleaned.mlir:20:11
-  wire _in_2;	// test.cleaned.mlir:19:11
-  wire _in_1;	// test.cleaned.mlir:18:11
-  wire _in_0;	// test.cleaned.mlir:17:10
-  assign _in_0 = in[0];	// test.cleaned.mlir:17:10
-  assign _in_1 = in[1];	// test.cleaned.mlir:18:11
-  assign _in_2 = in[2];	// test.cleaned.mlir:19:11
-  assign _in_3 = in[3];	// test.cleaned.mlir:20:11
-  assign out =
-    {_in_3, 3'h0} | ({1'h0, _in_2, 2'h0} | ({2'h0, _in_1, 1'h0} | {3'h0, _in_0}) & 4'hB)
-    & 4'h7;	// test.cleaned.mlir:3:14, :4:14, :5:14, :6:15, :7:14, :8:10, :9:10, :10:10, :11:10, :12:10, :13:10, :14:10, :15:10, :16:10, :17:10, :18:11, :19:11, :20:11, :21:5
+  assign out = in;	// test.cleaned.mlir:3:5
 endmodule
 
