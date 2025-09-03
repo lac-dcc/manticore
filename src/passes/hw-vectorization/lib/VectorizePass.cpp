@@ -4,7 +4,6 @@
 #include "mlir/Tools/Plugins/PassPlugin.h"
 #include "llvm/Config/llvm-config.h"
 
-#include "AssignmentBasedVectorization.h"
 #include "StructuralPatternVectorization.h"
 #include "VectorizationUtils.h"
 
@@ -12,6 +11,8 @@
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
+
+#include "../include/Vectorizer.h"
 
 namespace {
 
@@ -46,18 +47,17 @@ struct SimpleVectorizationPass
 
     // The main entry point for the pass execution logic.
     void runOnOperation() override {
-        // Clear statistics from any previous runs.
         stats.reset(); 
-        // Get the top-level module operation to be processed.
-        mlir::ModuleOp module = getOperation();
+        mlir::ModuleOp mlir_module = getOperation();
         
-        // Run the first vectorization strategy: assignment-based.
-        performVectorization(module, stats);
-        // Run the second vectorization strategy: structural pattern matching.
-        // processStructuralPatterns(module, stats);
-        
-        // After all transformations, print a summary of the results.
-        // stats.printReport();
+        SmallVector<hw::HWModuleOp, 8> hw_modules;
+        for (auto module : mlir_module.getOps<hw::HWModuleOp>()) hw_modules.push_back(module);
+
+        for(auto module : hw_modules) {
+          vectorizer vectorizer(module);
+          vectorizer.vectorize(); 
+        }
+
     }
 
     // Returns the command-line argument used to invoke this pass.

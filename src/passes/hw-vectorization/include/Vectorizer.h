@@ -1,7 +1,6 @@
 #ifndef VECTORIZER_H
 #define VECTORIZER_H
 
-#include "AssignmentBasedVectorization.h"
 #include "../include/BitArray.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -25,9 +24,9 @@ using namespace hw;
 
 class vectorizer {
 public:
-  vectorizer(mlir::ModuleOp module);      
+  vectorizer(hw::HWModuleOp module);      
 
-  mlir::ModuleOp module;
+  hw::HWModuleOp module;
   llvm::DenseMap<mlir::Value, bit_array> bit_arrays;
 
   void process_extract_ops();
@@ -39,7 +38,7 @@ public:
 
   void vectorize();
 
-  void apply_linear_vectorization(hw::HWModuleOp hw_module);
+  void apply_linear_vectorization();
   bool linear_vectorization_detected();
 };
 
