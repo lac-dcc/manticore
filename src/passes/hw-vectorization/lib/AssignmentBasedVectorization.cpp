@@ -36,10 +36,28 @@ llvm::DenseMap<mlir::Value, std::pair<int,int>> get_assignments(mlir::ModuleOp m
         if(!assignments.contains(result)) {
           assignments.insert({result, {arg_number, variable_index}}); 
         }
-
     }); 
 
     return assignments;
+}
+
+llvm::DenseMap<mlir::Value, bit_array> get_bit_arrays(mlir::ModuleOp module) {
+  llvm::DenseMap<mlir::Value, bit_array> bit_arrays;
+
+  module.walk([&](comb::ExtractOp op) {
+    mlir::Value input = op.getInput();
+    
+    mlir::Value result = op.getResult();
+    int index = op.getLowBit();
+
+    llvm::DenseSet<bit> bit_dense_set;
+    bit_dense_set.insert(bit(input, index));
+
+    bit_array bits(bit_dense_set, result);
+    bit_arrays.insert({result, bits});
+  });
+
+  return bit_arrays;
 }
 
 llvm::DenseMap<mlir::Value, std::pair<mlir::Value, int>> get_bit_vectors(mlir::ModuleOp module, llvm::DenseMap<mlir::Value, std::pair<int,int>>& extracted_bits) {
@@ -165,14 +183,23 @@ bool linear_vectorization_detected(mlir::ModuleOp module, llvm::DenseMap<mlir::V
 }
 
 
+
+
 void performVectorization(mlir::ModuleOp module, VectorizationStatistics &stats) {
-  llvm::DenseMap<mlir::Value, std::pair<int,int>> extracted_bits = get_assignments(module);
-  llvm::DenseMap<mlir::Value, std::pair<mlir::Value,int>> concatenations = get_bit_vectors(module, extracted_bits);
+  // llvm::DenseMap<mlir::Value, std::pair<int,int>> extracted_bits = get_assignments(module);
+  // llvm::DenseMap<mlir::Value, std::pair<mlir::Value,int>> concatenations = get_bit_vectors(module, extracted_bits);
+  //
+  // llvm::DenseMap<mlir::Value, std::vector<std::pair<mlir::Value,int>>> final = compute_ors_ands(module, concatenations);
+  //
+  // if(linear_vectorization_detected(module, final)) {
+  //   apply_vectorization(module);
+  // }
+  //
 
-  llvm::DenseMap<mlir::Value, std::vector<std::pair<mlir::Value,int>>> final = compute_ors_ands(module, concatenations);
+  auto bas = get_bit_arrays(module);
 
-  if(linear_vectorization_detected(module, final)) {
-    apply_vectorization(module);
+  for(auto [v, ba] : bas) {
+    ba.debug();
   }
 }
 
