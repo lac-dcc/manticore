@@ -14,10 +14,10 @@ module {
     %6 = comb.and %5, %c7_i4 : i4
     %7 = comb.concat %12, %c0_i3 : i1, i3
     %8 = comb.or %7, %6 : i4
-    %9 = comb.extract %in from 0 : (i4) -> i1
-    %10 = comb.extract %in from 1 : (i4) -> i1
-    %11 = comb.extract %in from 2 : (i4) -> i1
-    %12 = comb.extract %in from 3 : (i4) -> i1
+    %9 = comb.extract %in from 3 : (i4) -> i1
+    %10 = comb.extract %in from 2 : (i4) -> i1
+    %11 = comb.extract %in from 1 : (i4) -> i1
+    %12 = comb.extract %in from 0 : (i4) -> i1
     hw.output %8 : i4
   }
 }

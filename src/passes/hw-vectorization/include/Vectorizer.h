@@ -40,6 +40,11 @@ public:
 
   void apply_linear_vectorization();
   bool linear_vectorization_detected();
+
+  void apply_reverse_linear_vectorization();
+  bool reverse_linear_vectorization_detected();
+
+  void clean_hw_module(Block& body, OpBuilder& op_builder, Location& loc);
 };
 
 
