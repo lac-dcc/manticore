@@ -20,32 +20,33 @@ bool bit::operator==(const bit& other) const {
 }
 
 
-bit_array::bit_array(llvm::DenseSet<bit>& bits): bits(bits) {}
+bit_array::bit_array(llvm::DenseMap<int,bit>& bits): bits(bits) {}
 
 bit_array::bit_array(const bit_array& other): bits(other.bits) {}
 
-bit_array::bit_array(): bits(llvm::DenseSet<bit>()) {}
+
+bit_array::bit_array(): bits(llvm::DenseMap<int,bit>()) {}
 
 void bit_array::debug() {
   llvm::errs() << "(";
-  for(auto b : bits) {
-    llvm::errs() << b.index << " | " << b.source << " " << ",";
+  for(auto p : bits) {
+    llvm::errs() << p.first << " | " << p.second.source << " | " << p.second.index << " " << ",";
   }
   llvm::errs() << ")";
   llvm::errs() << "\n";
 }
 
 bit_array bit_array::unite(const bit_array& a, const bit_array& b) {
-  llvm::DenseSet<bit> bits_merged(a.bits);
+  llvm::DenseMap<int,bit> bits_merged(a.bits);
 
-  for(auto& bit : b.bits) bits_merged.insert(bit);
+  for(auto& pair : b.bits) bits_merged.insert(pair);
 
   return bit_array(bits_merged);
 }
 
-bool bit_array::all_bit_have_same_source() {
+bool bit_array::all_bits_have_same_source() {
   llvm::DenseSet<mlir::Value> sources; 
-  for(auto& bit : bits) {
+  for(auto& [_, bit] : bits) {
     if(!sources.contains(bit.source)) sources.insert(bit.source);
     if(sources.size() >= 2) return false;
   }
@@ -53,15 +54,30 @@ bool bit_array::all_bit_have_same_source() {
   return true;
 }
 
-bool bit_array::is_contiguous(int size) {
-  if(!all_bit_have_same_source()) return false;
+bool bit_array::is_linear(int size) {
+  if(!all_bits_have_same_source()) return false;
 
   int count = 0; 
-  for(auto& bit : bits) {
-    if(bit.index >= size) return false;
+  for(auto& [index, bit] : bits) {
+    if(index != bit.index) return false;
     count++;
   }
 
   return count == size;
+}
+
+bool bit_array::is_reverse_and_linear(int size) {
+  if(!all_bits_have_same_source()) return false;
+  int count = 0; 
+  for(auto& [index, bit] : bits) {
+    if((size - 1) - index != bit.index) return false;
+    count++;
+  }
+
+  return count == size;
+}
+
+bit bit_array::get_bit(int n) {
+  return bits[n];
 }
 

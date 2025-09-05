@@ -50,16 +50,19 @@ struct DenseMapInfo<bit> {
 }
 
 struct bit_array {
-  llvm::DenseSet<bit> bits;
+  llvm::DenseMap<int,bit> bits;
 
-  bit_array(llvm::DenseSet<bit>& bits);
+  bit_array(llvm::DenseMap<int,bit>& bits);
   bit_array(const bit_array& other);
   bit_array();
   static bit_array unite(const bit_array& a, const bit_array& b);
 
-  bool all_bit_have_same_source();
 
-  bool is_contiguous(int size);
+  bit get_bit(int index);
+
+  bool all_bits_have_same_source();
+  bool is_linear(int size);
+  bool is_reverse_and_linear(int size);
 
 
   void debug();
