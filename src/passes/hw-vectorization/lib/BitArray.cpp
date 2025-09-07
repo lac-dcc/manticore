@@ -19,6 +19,17 @@ bool bit::operator==(const bit& other) const {
     return source == other.source and index == other.index; 
 }
 
+bool bit::left_adjacent(const bit& other) {
+  return source == other.source and index == other.index + 1;
+}
+
+bool bit::right_adjacent(const bit& other) {
+  return source == other.source and index == other.index - 1;
+}
+
+assignment_group::assignment_group(): source(mlir::Value()), start(0), end(0), reversed(false) { }
+assignment_group::assignment_group(mlir::Value value, int start, int end, bool reversed): source(value), start(start), end(end), reversed(reversed) { }
+
 
 bit_array::bit_array(llvm::DenseMap<int,bit>& bits): bits(bits) {}
 
@@ -57,6 +68,7 @@ bool bit_array::all_bits_have_same_source() {
 bool bit_array::is_linear(int size) {
   if(!all_bits_have_same_source()) return false;
 
+  // refatorar aqui
   int count = 0; 
   for(auto& [index, bit] : bits) {
     if(index != bit.index) return false;
@@ -68,6 +80,8 @@ bool bit_array::is_linear(int size) {
 
 bool bit_array::is_reverse_and_linear(int size) {
   if(!all_bits_have_same_source()) return false;
+
+  // refatorar aqui
   int count = 0; 
   for(auto& [index, bit] : bits) {
     if((size - 1) - index != bit.index) return false;
@@ -79,5 +93,19 @@ bool bit_array::is_reverse_and_linear(int size) {
 
 bit bit_array::get_bit(int n) {
   return bits[n];
+}
+
+std::vector<assignment_group> bit_array::get_assignment_groups(int size) {
+
+  std::vector<assignment_group> assignments;
+
+
+  std::set<int> collected_indexes;
+  int start = bits[0].index, end = bits[0].index;
+
+  
+  for(int i = 0; i < size; i++) {
+    if(bits[i].are_adjacent(bits[i + 1]) and )
+  }
 }
 

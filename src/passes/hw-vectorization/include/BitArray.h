@@ -7,6 +7,7 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/Support/raw_ostream.h"
 #include <set>
+#include <vector>
 
 struct bit {
   mlir::Value source;
@@ -18,6 +19,9 @@ struct bit {
 
   bit& operator=(const bit& other); 
   bool operator==(const bit& other) const;
+
+  bool left_adjacent(const bit& other);
+  bool right_adjacent(const bit& other);
 
 };
 
@@ -49,6 +53,16 @@ struct DenseMapInfo<bit> {
 };
 }
 
+struct assignment_group {
+  mlir::Value source;
+  int start;
+  int end;
+  bool reversed;
+
+  assignment_group(mlir::Value source, int start, int end, bool reversed);
+  assignment_group();
+};
+
 struct bit_array {
   llvm::DenseMap<int,bit> bits;
 
@@ -64,6 +78,7 @@ struct bit_array {
   bool is_linear(int size);
   bool is_reverse_and_linear(int size);
 
+  std::vector<assignment_group> get_assignment_groups(int size);
 
   void debug();
 };
