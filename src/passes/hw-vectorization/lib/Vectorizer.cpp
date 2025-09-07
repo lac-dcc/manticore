@@ -17,15 +17,16 @@ void vectorizer::vectorize() {
 
 void vectorizer::apply_linear_vectorization() {
   Block &body = module.getBody().front();
-  OpBuilder op_builder(module.getContext());
+  OpBuilder builder(module.getContext());
   Location loc = module.getLoc();
   
-  clean_hw_module(body, op_builder, loc);
+  clean_hw_module(body, builder, loc);
 
+  // concertar ISSO
   BlockArgument in0 = body.getArgument(0);
 
-  op_builder.setInsertionPointToEnd(&body);
-  op_builder.create<hw::OutputOp>(loc, ValueRange{in0}); 
+  builder.setInsertionPointToEnd(&body);
+  builder.create<hw::OutputOp>(loc, ValueRange{in0}); 
 }
 
 void vectorizer::apply_reverse_linear_vectorization() {
@@ -34,40 +35,13 @@ void vectorizer::apply_reverse_linear_vectorization() {
   Location loc = module.getLoc();
   
   clean_hw_module(body, builder, loc);
-
-    // >>> Defina o insertion point onde você quer materializar as novas ops
-  builder.setInsertionPointToEnd(&body);
+  
 
   BlockArgument in0 = body.getArgument(0);
-  auto intTy = in0.getType().cast<mlir::IntegerType>();
-  unsigned width = intTy.getWidth();
 
-  llvm::SmallVector<mlir::Value, 8> reversedBits;
-  reversedBits.reserve(width);
-
-  // Extrai bits na ordem invertida (LSB->MSB vira MSB->LSB via concat)
-  for (unsigned i = 0; i < width; ++i) {
-    // Resultado de Extract é i1; passe o tipo explicitamente
-    auto bit = builder.create<comb::ExtractOp>(
-        loc,
-        builder.getI1Type(), // tipo de saída
-        in0,
-        i,                   // lowBit
-        1                    // width
-    );
-    reversedBits.push_back(bit);
-  }
-
-  mlir::Value reversed;
-  if (width == 1) {
-    reversed = reversedBits.front();
-  } else {
-    // Em comb.concat, o primeiro operando ocupa os bits mais altos
-    // Portanto, push de bit0 primeiro realmente inverte a ordem.
-    reversed = builder.create<comb::ConcatOp>(loc, reversedBits);
-  }
-
-  builder.create<hw::OutputOp>(loc, mlir::ValueRange{reversed});
+  builder.setInsertionPointToEnd(&body);
+  mlir::Value reversed = builder.create<comb::ReverseOp>(loc, in0);
+  builder.create<hw::OutputOp>(loc, ValueRange{reversed});
 }
 
 void vectorizer::clean_hw_module(Block& body, OpBuilder& op_builder, Location& loc) {
