@@ -23,6 +23,8 @@ struct bit {
   bool left_adjacent(const bit& other);
   bool right_adjacent(const bit& other);
 
+  bool adjacent(const bit& other);
+
 };
 
 const int INDEX_SENTINEL_VALUE = -1;
@@ -57,10 +59,14 @@ struct assignment_group {
   mlir::Value source;
   int start;
   int end;
-  bool reversed;
+  bool reverse;
 
-  assignment_group(mlir::Value source, int start, int end, bool reversed);
+  assignment_group(mlir::Value source, int start, int end);
   assignment_group();
+
+  int size();
+
+  void debug();
 };
 
 struct bit_array {

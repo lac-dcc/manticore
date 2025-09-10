@@ -28,6 +28,9 @@ public:
 
   hw::HWModuleOp module;
   llvm::DenseMap<mlir::Value, bit_array> bit_arrays;
+  Block& body;
+  OpBuilder builder;
+  Location loc;
 
   void process_extract_ops();
   void process_concat_ops();
@@ -43,6 +46,11 @@ public:
 
   void apply_reverse_linear_vectorization();
   bool reverse_linear_vectorization_detected();
+
+  void apply_mixed_vectorization();
+
+  void apply_vectorizations();
+  mlir::Value vectorize_bit_array(bit_array& array);
 
   void clean_hw_module(Block& body, OpBuilder& op_builder, Location& loc);
 };

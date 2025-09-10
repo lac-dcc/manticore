@@ -27,8 +27,29 @@ bool bit::right_adjacent(const bit& other) {
   return source == other.source and index == other.index - 1;
 }
 
-assignment_group::assignment_group(): source(mlir::Value()), start(0), end(0), reversed(false) { }
-assignment_group::assignment_group(mlir::Value value, int start, int end, bool reversed): source(value), start(start), end(end), reversed(reversed) { }
+bool bit::adjacent(const bit& other) {
+  return left_adjacent(other) or right_adjacent(other);
+}
+
+assignment_group::assignment_group(): source(mlir::Value()), start(0), end(0), reverse(false) { }
+assignment_group::assignment_group(mlir::Value source, int start, int end): source(source) {
+  this->start = std::min(start, end);
+  this->end = std::max(start, end);
+
+  reverse = start < end;
+}
+
+int assignment_group::size() {
+  return std::max(start, end) - std::min(start, end) + 1;
+}
+
+void assignment_group::debug() {
+  llvm::errs() << "(";
+  for(int i = std::min(start, end); i <= std::max(start, end); i++) {
+    llvm::errs() << i << ",";
+  }
+  llvm::errs() << ")";
+}
 
 
 bit_array::bit_array(llvm::DenseMap<int,bit>& bits): bits(bits) {}
@@ -97,15 +118,51 @@ bit bit_array::get_bit(int n) {
 
 std::vector<assignment_group> bit_array::get_assignment_groups(int size) {
 
+    for(auto& [index, bit] : bits) {
+      auto barg = mlir::cast<mlir::BlockArgument>(bit.source);
+      int input_index = barg.getArgNumber();
+
+      // llvm::errs() << index << " - " << input_index << "\n";
+    }
+
   std::vector<assignment_group> assignments;
 
+  int i = 0;  
+  int start = 0, end = 0;
+  // std::set<int> collected_indexes;
 
-  std::set<int> collected_indexes;
-  int start = bits[0].index, end = bits[0].index;
+  while(i < size - 1) {
 
-  
-  for(int i = 0; i < size; i++) {
-    if(bits[i].are_adjacent(bits[i + 1]) and )
+    // TODO: passar para std::contains depois (via c++ 20)
+    if(bits[i].adjacent(bits[i + 1])) {
+      end = i + 1;
+    }
+
+    else {
+      assignments.push_back(assignment_group(bits[start].source, bits[start].index, bits[end].index));
+      start = i + 1;
+      end = i + 1;
+    }
+
+    i++;
   }
+
+  if(bits[i - 1].adjacent(bits[i])) {
+    assignments.push_back(assignment_group(bits[start].source, bits[start].index, bits[end].index));
+  }
+  else {
+    assignments.push_back(assignment_group(bits[i].source, bits[i].index, bits[i].index));
+  }
+
+
+
+  for(auto& a : assignments) {
+    auto barg = mlir::cast<mlir::BlockArgument>(a.source);
+    int input_index = barg.getArgNumber();
+    llvm::errs() << input_index << " ";
+  }
+  llvm::errs() << "\n";
+
+  return assignments;
 }
 

@@ -2,9 +2,11 @@
 module linear(	// test.cleaned.mlir:2:3
   input  [3:0] in,	// test.cleaned.mlir:2:24
                in2,	// test.cleaned.mlir:2:37
-  output [3:0] out	// test.cleaned.mlir:2:52
+               in3,	// test.cleaned.mlir:2:51
+               in4,	// test.cleaned.mlir:2:65
+  output [3:0] out	// test.cleaned.mlir:2:80
 );
 
-  assign out = {<<{in}};	// test.cleaned.mlir:3:10, :4:5
+  assign out = {in[3], {<<{in2[1:0]}}, in4[2]};	// test.cleaned.mlir:3:10, :4:10, :5:10, :6:10, :7:10, :8:5
 endmodule
 
