@@ -50,7 +50,7 @@ public:
   void apply_mixed_vectorization();
 
   void apply_vectorizations();
-  mlir::Value vectorize_bit_array(bit_array& array);
+  mlir::Value vectorize_bit_array(bit_array& array, int size);
 
   void clean_hw_module(Block& body, OpBuilder& op_builder, Location& loc);
 };

@@ -1,4 +1,5 @@
 #include "../include/Vectorizer.h"
+#include <llvm/ADT/SmallVector.h>
 #include <mlir/IR/Value.h>
 #include <vector>
 
@@ -26,6 +27,7 @@ void vectorizer::vectorize() {
 
 void vectorizer::apply_vectorizations() {
   std::vector<bit_array> output_arrays;
+  std::vector<int> sizes;
 
   module.walk([&](hw::OutputOp op) {
     for(auto& output : op.getOutputs()) {
@@ -37,16 +39,52 @@ void vectorizer::apply_vectorizations() {
   clean_hw_module(body, builder, loc);
   builder.setInsertionPointToEnd(&body);
 
+  llvm::SmallVector<mlir::Value> outputs;
 
+  for(auto& bit_array : output_arrays) {
+    outputs.push_back(vectorize_bit_array(bit_array, bit_array.bits.size()));
+  }
+
+  
 }
 
-mlir::Value vectorizer::vectorize_bit_array(bit_array& array) {
+mlir::Value vectorizer::vectorize_bit_array(bit_array& array, int size) {
   builder.setInsertionPointToEnd(&body);
-  if(array.is_linear()) {
-    BlockArgument input_vector = 
-
-    return body.getArgument(array.get_bit(0).)
+  if(array.is_linear(size)) {
+    BlockArgument input_vector = mlir::cast<BlockArgument>(array.get_bit(0).source);
+    return input_vector;
   }
+  
+  if(array.is_reverse_and_linear(size)) {
+    BlockArgument input_vector = mlir::cast<BlockArgument>(array.get_bit(0).source);
+    mlir::Value reversed = builder.create<comb::ReverseOp>(loc, input_vector);
+    return reversed;
+  }
+
+
+  std::vector<assignment_group> assignments;
+  llvm::SmallVector<mlir::Value> values;
+
+  for(auto& assignment : assignments) {
+    auto int_type = IntegerType::get(builder.getContext(), assignment.size());
+    
+    auto barg = mlir::cast<BlockArgument>(assignment.source);
+    int input_index = barg.getArgNumber();
+    mlir::Value input = body.getArgument(input_index);
+
+    mlir::Value extracted_bits = builder.create<comb::ExtractOp>(loc, int_type, input, assignment.start);
+
+    if(assignment.reverse) {
+      extracted_bits = builder.create<comb::ReverseOp>(loc, int_type, extracted_bits);
+    }
+
+    
+    values.push_back(extracted_bits);
+  }
+
+  Value out = builder.create<comb::ConcatOp>(loc, values);
+
+  return out;
 }
 
 void vectorizer::apply_mixed_vectorization() {
