@@ -1,12 +1,10 @@
 #include "../include/Vectorizer.h"
 #include <llvm/ADT/SmallVector.h>
+#include <mlir/IR/Builders.h>
 #include <mlir/IR/Value.h>
 #include <vector>
 
 vectorizer::vectorizer(hw::HWModuleOp module): module(module) {
-  Block &body = module.getBody().front();
-  OpBuilder builder(module.getContext());
-  Location loc = module.getLoc();
 }
 
 void vectorizer::vectorize() {
@@ -14,15 +12,7 @@ void vectorizer::vectorize() {
   process_concat_ops();
   process_logical_ops();
 
-  if(linear_vectorization_detected()) {
-    apply_linear_vectorization();
-  }
-  else if(reverse_linear_vectorization_detected()) {
-    apply_reverse_linear_vectorization();    
-  }
-  else {
-    apply_mixed_vectorization();
-  }
+  apply_vectorizations();
 }
 
 void vectorizer::apply_vectorizations() {
@@ -30,25 +20,29 @@ void vectorizer::apply_vectorizations() {
   std::vector<int> sizes;
 
   module.walk([&](hw::OutputOp op) {
-    for(auto& output : op.getOutputs()) {
+    for(auto output : op.getOutputs()) {
       output_arrays.push_back(bit_arrays[output]);
     }
   });
 
-
+  Block &body = module.getBody().front();
+  OpBuilder builder(module.getContext());
+  Location loc = module.getLoc();
   clean_hw_module(body, builder, loc);
   builder.setInsertionPointToEnd(&body);
 
   llvm::SmallVector<mlir::Value> outputs;
 
   for(auto& bit_array : output_arrays) {
-    outputs.push_back(vectorize_bit_array(bit_array, bit_array.bits.size()));
+    outputs.push_back(vectorize_bit_array(bit_array, bit_array.bits.size(), body, builder, loc));
   }
 
-  
+  // llvm::errs() << outputs.size() << "\n";
+
+  builder.create<hw::OutputOp>(loc, outputs); 
 }
 
-mlir::Value vectorizer::vectorize_bit_array(bit_array& array, int size) {
+mlir::Value vectorizer::vectorize_bit_array(bit_array& array, int size, Block& body, OpBuilder builder, Location loc) {
   builder.setInsertionPointToEnd(&body);
   if(array.is_linear(size)) {
     BlockArgument input_vector = mlir::cast<BlockArgument>(array.get_bit(0).source);
@@ -62,7 +56,7 @@ mlir::Value vectorizer::vectorize_bit_array(bit_array& array, int size) {
   }
 
 
-  std::vector<assignment_group> assignments;
+  std::vector<assignment_group> assignments = array.get_assignment_groups(size);
   llvm::SmallVector<mlir::Value> values;
 
   for(auto& assignment : assignments) {
@@ -128,6 +122,8 @@ void vectorizer::apply_mixed_vectorization() {
 
   Value out = builder.create<comb::ConcatOp>(loc, values);
   builder.create<hw::OutputOp>(loc, ValueRange{out}); 
+
+
 }
 
 void vectorizer::apply_linear_vectorization() {
