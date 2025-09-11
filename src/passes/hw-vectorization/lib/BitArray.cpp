@@ -66,25 +66,27 @@ bool bit_array::all_bits_have_same_source() const {
     return true;
 }
 
-bool bit_array::is_linear(int size) {
+bool bit_array::is_linear(int size, mlir::Value sourceInput) {
     if (bits.size() != size) return false;
-    
-    if(!all_bits_have_same_source()) return false;
-    
+
     for(const auto& [index, bit] : bits) {
-        if(index != bit.index) return false;
+
+        if (bit.source != sourceInput || bit.index != index) {
+            return false;
+        }
     }
 
     return true;
 }
 
-bool bit_array::is_reverse_and_linear(int size) {
+bool bit_array::is_reverse_and_linear(int size, mlir::Value sourceInput) {
     if (bits.size() != size) return false;
 
-    if(!all_bits_have_same_source()) return false;
-    
-    for(const auto& [index, bit] : bits) {
-        if((size - 1) - index != bit.index) return false;
+    for (const auto& [index, bit] : bits) {
+
+        if (bit.source != sourceInput || (size - 1) - index != bit.index) {
+            return false;
+        }
     }
 
     return true;
@@ -100,4 +102,8 @@ mlir::Value bit_array::getSingleSourceValue() const {
         return nullptr;
     }
     return bits.begin()->second.source;
+}
+
+size_t bit_array::size() const {
+    return bits.size();
 }

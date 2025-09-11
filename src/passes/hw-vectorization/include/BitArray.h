@@ -75,10 +75,11 @@ struct bit_array {
   bit get_bit(int index);
 
   bool all_bits_have_same_source() const;
-  bool is_linear(int size);
-  bool is_reverse_and_linear(int size);
+  bool is_linear(int size, mlir::Value sourceInput);
+  bool is_reverse_and_linear(int size, mlir::Value sourceInput);
 
   mlir::Value getSingleSourceValue() const;
+  size_t size() const;
 
   void debug();
 };

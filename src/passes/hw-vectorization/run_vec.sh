@@ -28,6 +28,7 @@ echo "Cleaning and optimizing IR..."
   --llhd-process-lowering \
   --cse \
   --canonicalize \
+  --hw-cleanup    \
   ${BASE_NAME}.after_pass.mlir -o ${BASE_NAME}.cleaned.mlir
 
 # Step 5: Generate final Verilog

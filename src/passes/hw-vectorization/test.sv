@@ -55,7 +55,6 @@ module linear_and_reverse(output wire [7:0] out, output wire [3:0] out2, input w
     assign out2[0] = in2[3];
 endmodule
 
-// NÃO VETORIZAR
 module bit_drop(output wire [3:0] out, input wire [3:0] in);
     assign out[3] = in[3];
     assign out[2] = in[2];

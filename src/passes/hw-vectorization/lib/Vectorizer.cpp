@@ -26,15 +26,20 @@ void vectorizer::vectorize() {
             continue;
         
         bit_array &arr = bit_arrays[oldOutputVal];
+
+        if (arr.size() != bitWidth) {
+            continue; 
+        }
+
         Value sourceInput = arr.getSingleSourceValue();
         if (!sourceInput)
             continue;
         
-        if (arr.is_linear(bitWidth)) {
+        if (arr.is_linear(bitWidth, sourceInput)) {
             apply_linear_vectorization(oldOutputVal, sourceInput);
             changed = true;
         } 
-        else if (arr.is_reverse_and_linear(bitWidth)) {
+        else if (arr.is_reverse_and_linear(bitWidth, sourceInput)) {
             apply_reverse_vectorization(builder, oldOutputVal, sourceInput);
             changed = true;
         } 
