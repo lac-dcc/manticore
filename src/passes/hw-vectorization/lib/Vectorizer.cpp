@@ -59,6 +59,8 @@ mlir::Value vectorizer::vectorize_bit_array(bit_array& array, int size, Block& b
   std::vector<assignment_group> assignments = array.get_assignment_groups(size);
   llvm::SmallVector<mlir::Value> values;
 
+  std::reverse(assignments.begin(), assignments.end());
+
   for(auto& assignment : assignments) {
     auto int_type = IntegerType::get(builder.getContext(), assignment.size());
     
@@ -68,7 +70,7 @@ mlir::Value vectorizer::vectorize_bit_array(bit_array& array, int size, Block& b
 
     mlir::Value extracted_bits = builder.create<comb::ExtractOp>(loc, int_type, input, assignment.start);
 
-    if(assignment.reverse) {
+    if(!assignment.reverse) {
       extracted_bits = builder.create<comb::ReverseOp>(loc, int_type, extracted_bits);
     }
 

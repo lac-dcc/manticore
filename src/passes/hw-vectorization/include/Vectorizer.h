@@ -15,6 +15,7 @@
 #include <mlir/IR/MLIRContext.h>
 
 #include "../include/BitArray.h"
+#include <algorithm>
 
 
 using namespace mlir;
