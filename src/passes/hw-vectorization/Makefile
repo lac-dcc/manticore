@@ -1,6 +1,6 @@
 LLVM_PREFIX ?= /usr/local
 MLIR_PREFIX ?= /usr/local
-CIRCT_PREFIX ?= /home/ullas/manticore/circt
+CIRCT_PREFIX ?= /home/mariaguimaraes/projects/circt/
 
 LLVM_CONFIG := $(LLVM_PREFIX)/bin/llvm-config
 CLANG       := clang++

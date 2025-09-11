@@ -38,13 +38,12 @@ public:
 
   void vectorize();
 
-  void apply_linear_vectorization();
-  bool linear_vectorization_detected();
-
-  void apply_reverse_linear_vectorization();
-  bool reverse_linear_vectorization_detected();
+  void apply_linear_vectorization(mlir::Value oldOutputVal, mlir::Value sourceInput);
+  void apply_reverse_vectorization(mlir::OpBuilder &builder, mlir::Value oldOutputVal, mlir::Value sourceInput);
+  void apply_mix_vectorization(mlir::OpBuilder &builder, mlir::Value oldOutputVal, mlir::Value sourceInput, const std::vector<unsigned> &map);
 
   void clean_hw_module(Block& body, OpBuilder& op_builder, Location& loc);
+  void cleanup_dead_ops(Block& body);
 };
 
 

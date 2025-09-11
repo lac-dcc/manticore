@@ -1,4 +1,5 @@
 #include "../include/BitArray.h"
+#include <vector>
 
 bit::bit(mlir::Value source, int index): source(source), index(index)  {}
 
@@ -48,64 +49,55 @@ void bit_array::debug() {
 }
 
 bit_array bit_array::unite(const bit_array& a, const bit_array& b) {
-  llvm::DenseMap<int,bit> bits_merged(a.bits);
-
-  for(auto& pair : b.bits) bits_merged.insert(pair);
-
-  return bit_array(bits_merged);
+    llvm::DenseMap<int, bit> bits_merged(a.bits);
+    for (const auto& pair : b.bits) {
+        bits_merged.insert(pair);
+    }
+    return bit_array(bits_merged);
 }
 
-bool bit_array::all_bits_have_same_source() {
-  llvm::DenseSet<mlir::Value> sources; 
-  for(auto& [_, bit] : bits) {
-    if(!sources.contains(bit.source)) sources.insert(bit.source);
-    if(sources.size() >= 2) return false;
-  }
+bool bit_array::all_bits_have_same_source() const { 
+    llvm::DenseSet<mlir::Value> sources; 
+    for(const auto& [_, bit] : bits) {
+        if(!sources.contains(bit.source)) sources.insert(bit.source);
+        if(sources.size() >= 2) return false;
+    }
 
-  return true;
+    return true;
 }
 
 bool bit_array::is_linear(int size) {
-  if(!all_bits_have_same_source()) return false;
+    if (bits.size() != size) return false;
+    
+    if(!all_bits_have_same_source()) return false;
+    
+    for(const auto& [index, bit] : bits) {
+        if(index != bit.index) return false;
+    }
 
-  // refatorar aqui
-  int count = 0; 
-  for(auto& [index, bit] : bits) {
-    if(index != bit.index) return false;
-    count++;
-  }
-
-  return count == size;
+    return true;
 }
 
 bool bit_array::is_reverse_and_linear(int size) {
-  if(!all_bits_have_same_source()) return false;
+    if (bits.size() != size) return false;
 
-  // refatorar aqui
-  int count = 0; 
-  for(auto& [index, bit] : bits) {
-    if((size - 1) - index != bit.index) return false;
-    count++;
-  }
+    if(!all_bits_have_same_source()) return false;
+    
+    for(const auto& [index, bit] : bits) {
+        if((size - 1) - index != bit.index) return false;
+    }
 
-  return count == size;
+    return true;
 }
 
 bit bit_array::get_bit(int n) {
   return bits[n];
 }
 
-std::vector<assignment_group> bit_array::get_assignment_groups(int size) {
+mlir::Value bit_array::getSingleSourceValue() const {
 
-  std::vector<assignment_group> assignments;
-
-
-  std::set<int> collected_indexes;
-  int start = bits[0].index, end = bits[0].index;
-
-  
-  for(int i = 0; i < size; i++) {
-    if(bits[i].are_adjacent(bits[i + 1]) and )
-  }
+    if (!all_bits_have_same_source() || bits.empty()) {
+        return nullptr;
+    }
+    return bits.begin()->second.source;
 }
-

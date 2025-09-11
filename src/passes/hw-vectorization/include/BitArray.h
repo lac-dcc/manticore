@@ -74,14 +74,15 @@ struct bit_array {
 
   bit get_bit(int index);
 
-  bool all_bits_have_same_source();
+  bool all_bits_have_same_source() const;
   bool is_linear(int size);
   bool is_reverse_and_linear(int size);
 
-  std::vector<assignment_group> get_assignment_groups(int size);
+  mlir::Value getSingleSourceValue() const;
 
   void debug();
 };
 
+  std::vector<std::vector<int>> get_assignment_groups(int size);
 
 #endif

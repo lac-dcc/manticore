@@ -1,90 +1,133 @@
 #include "../include/Vectorizer.h"
+#include "../include/BitArray.h"
+
+#include "mlir/IR/OpDefinition.h"
+#include "llvm/ADT/SmallVector.h"
+#include <algorithm>
+#include <vector>
 
 vectorizer::vectorizer(hw::HWModuleOp module): module(module) {}
 
 void vectorizer::vectorize() {
-  process_extract_ops();
-  process_concat_ops();
-  process_logical_ops();
+    process_extract_ops();
+    process_concat_ops();
+    process_logical_ops();
 
-  if(linear_vectorization_detected()) {
-    apply_linear_vectorization();
-  }
-  if(reverse_linear_vectorization_detected()) {
-    apply_reverse_linear_vectorization();    
-  }
-}
+    Block &block = module.getBody().front();
+    auto outputOp = dyn_cast<hw::OutputOp>(block.getTerminator());
+    if (!outputOp) return;
 
-void vectorizer::apply_linear_vectorization() {
-  Block &body = module.getBody().front();
-  OpBuilder builder(module.getContext());
-  Location loc = module.getLoc();
-  
-  clean_hw_module(body, builder, loc);
+    OpBuilder builder(module.getContext());
+    bool changed = false;
 
-  // concertar ISSO
-  BlockArgument in0 = body.getArgument(0);
+    for (Value oldOutputVal : outputOp->getOperands()) {
+        unsigned bitWidth = cast<IntegerType>(oldOutputVal.getType()).getWidth();
+        if (bit_arrays.find(oldOutputVal) == bit_arrays.end())
+            continue;
+        
+        bit_array &arr = bit_arrays[oldOutputVal];
+        Value sourceInput = arr.getSingleSourceValue();
+        if (!sourceInput)
+            continue;
+        
+        if (arr.is_linear(bitWidth)) {
+            apply_linear_vectorization(oldOutputVal, sourceInput);
+            changed = true;
+        } 
+        else if (arr.is_reverse_and_linear(bitWidth)) {
+            apply_reverse_vectorization(builder, oldOutputVal, sourceInput);
+            changed = true;
+        } 
+        else {
+            std::vector<unsigned> currentPermutationMap;
+            currentPermutationMap.reserve(bitWidth);
+            for (unsigned i = 0; i < bitWidth; ++i)
+                currentPermutationMap.push_back(arr.get_bit(i).index);
+            
+            std::vector<bool> seen(bitWidth, false);
+            bool isFullPermutation = true;
+            for (unsigned idx : currentPermutationMap) {
+                if (idx >= bitWidth || seen[idx]) {
+                    isFullPermutation = false;
+                    break;
+                }
+                seen[idx] = true;
+            }
 
-  builder.setInsertionPointToEnd(&body);
-  builder.create<hw::OutputOp>(loc, ValueRange{in0}); 
-}
-
-void vectorizer::apply_reverse_linear_vectorization() {
-  Block &body = module.getBody().front();
-  OpBuilder builder(module.getContext());
-  Location loc = module.getLoc();
-  
-  clean_hw_module(body, builder, loc);
-  
-
-  BlockArgument in0 = body.getArgument(0);
-
-  builder.setInsertionPointToEnd(&body);
-  mlir::Value reversed = builder.create<comb::ReverseOp>(loc, in0);
-  builder.create<hw::OutputOp>(loc, ValueRange{reversed});
-}
-
-void vectorizer::clean_hw_module(Block& body, OpBuilder& op_builder, Location& loc) {
-  for(auto input :  body.getArguments()) {
-    for (Operation &op : body) {
-      for (Value res : op.getResults()) {
-        if (res != input)               
-          res.replaceAllUsesWith(input);
-      }
+            if (isFullPermutation) {
+                apply_mix_vectorization(builder, oldOutputVal, sourceInput, currentPermutationMap);
+                changed = true;
+            }
+        }
     }
-  }
 
-  if (Operation *term = body.getTerminator()) term->erase();
-  while (!body.empty()) body.back().erase();
+    if (changed) {
+        cleanup_dead_ops(block);
+    }
 }
 
+void vectorizer::apply_linear_vectorization(Value oldOutputVal, Value sourceInput) {
+    oldOutputVal.replaceAllUsesWith(sourceInput);
+}
 
-bool vectorizer::linear_vectorization_detected() {
-  bool linear_vectorization;
+void vectorizer::apply_reverse_vectorization(OpBuilder &builder, Value oldOutputVal, Value sourceInput) {
+    builder.setInsertionPoint(*oldOutputVal.getUsers().begin());
+    Location loc = sourceInput.getLoc();
 
-  module.walk([&](hw::OutputOp op) {
-    mlir::Value lhs = op.getOutputs()[0]; 
-    unsigned bit_width = llvm::cast<mlir::IntegerType>(lhs.getType()).getWidth();
+    Value reversedInput = builder.create<comb::ReverseOp>(loc, sourceInput);
+    oldOutputVal.replaceAllUsesWith(reversedInput);
+}
+
+void vectorizer::apply_mix_vectorization(OpBuilder &builder, Value oldOutputVal, Value sourceInput, const std::vector<unsigned> &map) {
+    unsigned bitWidth = cast<IntegerType>(oldOutputVal.getType()).getWidth();
+    Location loc = sourceInput.getLoc();
+    builder.setInsertionPoint(*oldOutputVal.getUsers().begin());
+
+    std::vector<Value> extractedChunks;
+    unsigned i = 0;
+    while (i < bitWidth) {
+        unsigned startBit = map[i];
+        unsigned len = 1;
+        while ((i + len < bitWidth) && (map[i + len] == startBit + len)) {
+            len++;
+        }
+
+        Value chunk = builder.create<comb::ExtractOp>(loc, builder.getIntegerType(len),
+                                                      sourceInput, builder.getI32IntegerAttr(startBit));
+        extractedChunks.push_back(chunk);
+        i += len;
+    }
+
+    Value newOutputVal;
+    if (extractedChunks.size() == 1) {
+        newOutputVal = extractedChunks[0];
+    } else {
+        std::reverse(extractedChunks.begin(), extractedChunks.end());
+        newOutputVal = builder.create<comb::ConcatOp>(loc, extractedChunks);
+    }
     
-    linear_vectorization = bit_arrays[lhs].is_linear(bit_width);
-  });
-
-  return linear_vectorization;
+    oldOutputVal.replaceAllUsesWith(newOutputVal);
 }
 
-bool vectorizer::reverse_linear_vectorization_detected() {
-  bool reverse_vectorization;
+void vectorizer::cleanup_dead_ops(Block &block) {
+    bool changed = true;
+    while (changed) {
+        changed = false;
 
-  module.walk([&](hw::OutputOp op) {
-    mlir::Value lhs = op.getOutputs()[0]; 
-    unsigned bit_width = llvm::cast<mlir::IntegerType>(lhs.getType()).getWidth();
-    
-    reverse_vectorization = bit_arrays[lhs].is_reverse_and_linear(bit_width);
-  });
-
-  return reverse_vectorization;
+        llvm::SmallVector<Operation *, 16> deadOps;
+        for (Operation &op : block) {
+            if (op.use_empty() && !op.hasTrait<mlir::OpTrait::IsTerminator>()) {
+                deadOps.push_back(&op);
+            }
+        }
+        if (!deadOps.empty()) {
+            changed = true;
+            for (Operation *op : deadOps) {
+                op->erase();
+            }
+        }
+    }
 }
-
 
 void vectorizer::process_extract_ops() {
   module.walk([&](comb::ExtractOp op) {
@@ -104,41 +147,54 @@ void vectorizer::process_extract_ops() {
 }
 
 void vectorizer::process_concat_ops() {
-  module.walk([&](comb::ConcatOp op) {
-    mlir::Value result = op.getResult();
+    module.walk([&](comb::ConcatOp op) {
+        mlir::Value result = op.getResult();
+        bit_array concatenatedArray; 
 
-    unsigned vector_size = llvm::cast<mlir::IntegerType>(result.getType()).getWidth();
+        unsigned currentBitOffset = 0;
 
-    int index = 0;
-    for(auto [i, value] : llvm::enumerate(op.getInputs())) {
-      unsigned bit_width = llvm::cast<mlir::IntegerType>(value.getType()).getWidth();
+        for (Value operand : llvm::reverse(op.getInputs())) {
+            unsigned operandWidth = cast<IntegerType>(operand.getType()).getWidth();
 
-      if(bit_arrays.contains(value)) {
-        llvm::DenseMap<int,bit> array;
-        //TODO REVISAR ESSA CONTA, PODE ESTAR ERRADO
-        array.insert({vector_size - index - 1, bit_arrays[value].get_bit(0)});
-
-        bit_arrays.insert({result, array});
-      }
-      index += bit_width;
-    }
-  });
+            if (bit_arrays.count(operand)) {
+                bit_array &operandArray = bit_arrays[operand];
+                for (auto const& [bitIndex, bitInfo] : operandArray.bits) {
+                    concatenatedArray.bits[bitIndex + currentBitOffset] = bitInfo;
+                }
+            }
+            currentBitOffset += operandWidth;
+        }
+        bit_arrays.insert({result, concatenatedArray});
+    });
 }
 
 void vectorizer::process_or_op(comb::OrOp op) {
-  mlir::Value result = op.getResult();
-  mlir::Value lhs = op.getInputs()[0];
-  mlir::Value rhs = op.getInputs()[1];
+    mlir::Value result = op.getResult();
+    mlir::Value lhs = op.getInputs()[0];
+    mlir::Value rhs = op.getInputs()[1];
 
-  bit_arrays.insert({result, bit_array::unite(bit_arrays[lhs], bit_arrays[rhs])});
-} 
+    bit_array lhs_array = bit_arrays.count(lhs) ? bit_arrays[lhs] : bit_array();
+    bit_array rhs_array = bit_arrays.count(rhs) ? bit_arrays[rhs] : bit_array();
+
+    bit_arrays.insert({result, bit_array::unite(lhs_array, rhs_array)});
+}
 
 void vectorizer::process_and_op(comb::AndOp op) {
-  mlir::Value result = op.getResult();
-  mlir::Value lhs = op.getInputs()[0];
+    mlir::Value result = op.getResult();
+    mlir::Value lhs = op.getInputs()[0];
+    mlir::Value rhs = op.getInputs()[1];
 
-  bit_arrays.insert({result, bit_arrays[lhs]});
-} 
+    if (bit_arrays.count(lhs) && !bit_arrays.count(rhs)) {
+        bit_arrays.insert({result, bit_arrays[lhs]});
+        return;
+    }
+    if (bit_arrays.count(rhs) && !bit_arrays.count(lhs)) {
+        bit_arrays.insert({result, bit_arrays[rhs]});
+        return;
+    }
+    
+    bit_arrays.insert({result, bit_array()});
+}
 
 void vectorizer::process_logical_ops() {
   module.walk([&](mlir::Operation* op) {
