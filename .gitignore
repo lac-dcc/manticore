@@ -1,6 +1,7 @@
 .vscode
 jgproject
 src/passes/Vectorization/Makefile
+/src/passes/hw-vectorization/build/
 scripts
 .venv
 *.so

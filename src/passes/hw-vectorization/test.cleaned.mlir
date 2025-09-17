@@ -18,18 +18,45 @@ module {
     %8 = comb.concat %7, %6, %5, %4, %3 : i2, i1, i1, i1, i3
     hw.output %2, %8 : i4, i8
   }
-  hw.module @mix_bit2(in %in : i8, out out : i8) {
-    %0 = comb.extract %in from 1 : (i8) -> i3
-    %1 = comb.extract %in from 0 : (i8) -> i1
-    %2 = comb.extract %in from 5 : (i8) -> i1
-    %3 = comb.extract %in from 4 : (i8) -> i1
-    %4 = comb.extract %in from 6 : (i8) -> i2
-    %5 = comb.concat %4, %3, %2, %1, %0 : i2, i1, i1, i1, i3
-    hw.output %5 : i8
-  }
   hw.module @linear_and_reverse(in %in : i8, in %in2 : i4, out out : i8, out out2 : i4) {
     %0 = comb.reverse %in2 : i4
     hw.output %in, %0 : i8, i4
+  }
+  hw.module @test_mux(in %a : i4, in %b : i4, in %sel : i1, out result : i4) {
+    %c-1_i4 = hw.constant -1 : i4
+    %0 = comb.replicate %sel : (i1) -> i4
+    %1 = comb.and %a, %0 : i4
+    %2 = comb.xor %0, %c-1_i4 : i4
+    %3 = comb.and %b, %2 : i4
+    %4 = comb.or %1, %3 : i4
+    hw.output %4 : i4
+  }
+  hw.module @test_and_enable(in %a : i4, in %enable : i1, out o : i4) {
+    %0 = comb.replicate %enable : (i1) -> i4
+    %1 = comb.and %a, %0 : i4
+    hw.output %1 : i4
+  }
+  hw.module @test_multiple_patterns(in %a : i4, in %b : i4, in %c : i4, out out_xor : i4, out out_and : i4) {
+    %0 = comb.xor %a, %b : i4
+    %1 = comb.and %a, %c : i4
+    hw.output %0, %1 : i4, i4
+  }
+  hw.module @test_add(in %a : i4, in %b : i4, out o : i4) {
+    %0 = comb.add %a, %b : i4
+    hw.output %0 : i4
+  }
+  hw.module @CustomLogic(in %a : i8, in %b : i8, out out : i8) {
+    %c-1_i8 = hw.constant -1 : i8
+    %0 = comb.and %a, %b : i8
+    %1 = comb.xor %a, %c-1_i8 : i8
+    %2 = comb.or %0, %1 : i8
+    hw.output %2 : i8
+  }
+  hw.module @GatedXOR(in %a : i4, in %b : i4, in %enable : i1, out out : i4) {
+    %0 = comb.xor %a, %b : i4
+    %1 = comb.replicate %enable : (i1) -> i4
+    %2 = comb.and %0, %1 : i4
+    hw.output %2 : i4
   }
   hw.module @bit_drop(in %in : i4, out out : i4) {
     %c0_i3 = hw.constant 0 : i3

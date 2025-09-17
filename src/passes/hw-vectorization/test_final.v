@@ -26,77 +26,129 @@ module bit_mixing_vectorization(	// test.cleaned.mlir:9:3
   assign out = {in[7:6], in[4], in[5], in[0], in[3:1]};	// test.cleaned.mlir:13:10, :14:10, :15:10, :16:10, :17:10, :18:10, :19:5
 endmodule
 
-module mix_bit2(	// test.cleaned.mlir:21:3
-  input  [7:0] in,	// test.cleaned.mlir:21:26
-  output [7:0] out	// test.cleaned.mlir:21:40
+module linear_and_reverse(	// test.cleaned.mlir:21:3
+  input  [7:0] in,	// test.cleaned.mlir:21:36
+  input  [3:0] in2,	// test.cleaned.mlir:21:49
+  output [7:0] out,	// test.cleaned.mlir:21:64
+  output [3:0] out2	// test.cleaned.mlir:21:78
 );
 
-  assign out = {in[7:6], in[4], in[5], in[0], in[3:1]};	// test.cleaned.mlir:22:10, :23:10, :24:10, :25:10, :26:10, :27:10, :28:5
+  assign out = in;	// test.cleaned.mlir:23:5
+  assign out2 = {<<{in2}};	// test.cleaned.mlir:22:10, :23:5
 endmodule
 
-module linear_and_reverse(	// test.cleaned.mlir:30:3
-  input  [7:0] in,	// test.cleaned.mlir:30:36
-  input  [3:0] in2,	// test.cleaned.mlir:30:49
-  output [7:0] out,	// test.cleaned.mlir:30:64
-  output [3:0] out2	// test.cleaned.mlir:30:78
+module test_mux(	// test.cleaned.mlir:25:3
+  input  [3:0] a,	// test.cleaned.mlir:25:26
+               b,	// test.cleaned.mlir:25:38
+  input        sel,	// test.cleaned.mlir:25:50
+  output [3:0] result	// test.cleaned.mlir:25:65
 );
 
-  assign out = in;	// test.cleaned.mlir:32:5
-  assign out2 = {<<{in2}};	// test.cleaned.mlir:31:10, :32:5
+  wire [3:0] _GEN = {4{sel}};	// test.cleaned.mlir:27:10
+  assign result = a & _GEN | b & ~_GEN;	// test.cleaned.mlir:27:10, :28:10, :29:10, :30:10, :31:10, :32:5
 endmodule
 
-module bit_drop(	// test.cleaned.mlir:34:3
-  input  [3:0] in,	// test.cleaned.mlir:34:26
-  output [3:0] out	// test.cleaned.mlir:34:40
+module test_and_enable(	// test.cleaned.mlir:34:3
+  input  [3:0] a,	// test.cleaned.mlir:34:33
+  input        enable,	// test.cleaned.mlir:34:45
+  output [3:0] o	// test.cleaned.mlir:34:63
 );
 
-  wire _in_1;	// test.cleaned.mlir:46:10
-  wire _in_2;	// test.cleaned.mlir:45:10
-  wire _in_3;	// test.cleaned.mlir:44:10
-  assign _in_3 = in[3];	// test.cleaned.mlir:44:10
-  assign _in_2 = in[2];	// test.cleaned.mlir:45:10
-  assign _in_1 = in[1];	// test.cleaned.mlir:46:10
-  assign out = {_in_3, 3'h0} | {1'h0, {_in_2, 2'h0} | {1'h0, _in_1, 1'h0}};	// test.cleaned.mlir:35:14, :36:14, :37:14, :38:10, :39:10, :40:10, :41:10, :42:10, :43:10, :44:10, :45:10, :46:10, :47:5
+  assign o = a & {4{enable}};	// test.cleaned.mlir:35:10, :36:10, :37:5
 endmodule
 
-module bit_duplicate(	// test.cleaned.mlir:49:3
-  input  [3:0] in,	// test.cleaned.mlir:49:31
-  output [3:0] out	// test.cleaned.mlir:49:45
+module test_multiple_patterns(	// test.cleaned.mlir:39:3
+  input  [3:0] a,	// test.cleaned.mlir:39:40
+               b,	// test.cleaned.mlir:39:52
+               c,	// test.cleaned.mlir:39:64
+  output [3:0] out_xor,	// test.cleaned.mlir:39:77
+               out_and	// test.cleaned.mlir:39:95
 );
 
-  wire _in_0;	// test.cleaned.mlir:64:11
-  wire _in_2;	// test.cleaned.mlir:63:11
-  wire _in_3;	// test.cleaned.mlir:62:10
-  assign _in_3 = in[3];	// test.cleaned.mlir:62:10
-  assign _in_2 = in[2];	// test.cleaned.mlir:63:11
-  assign _in_0 = in[0];	// test.cleaned.mlir:64:11
+  assign out_xor = a ^ b;	// test.cleaned.mlir:40:10, :42:5
+  assign out_and = a & c;	// test.cleaned.mlir:41:10, :42:5
+endmodule
+
+module test_add(	// test.cleaned.mlir:44:3
+  input  [3:0] a,	// test.cleaned.mlir:44:26
+               b,	// test.cleaned.mlir:44:38
+  output [3:0] o	// test.cleaned.mlir:44:51
+);
+
+  assign o = a + b;	// test.cleaned.mlir:45:10, :46:5
+endmodule
+
+module CustomLogic(	// test.cleaned.mlir:48:3
+  input  [7:0] a,	// test.cleaned.mlir:48:29
+               b,	// test.cleaned.mlir:48:41
+  output [7:0] out	// test.cleaned.mlir:48:54
+);
+
+  assign out = a & b | ~a;	// test.cleaned.mlir:50:10, :51:10, :52:10, :53:5
+endmodule
+
+module GatedXOR(	// test.cleaned.mlir:55:3
+  input  [3:0] a,	// test.cleaned.mlir:55:26
+               b,	// test.cleaned.mlir:55:38
+  input        enable,	// test.cleaned.mlir:55:50
+  output [3:0] out	// test.cleaned.mlir:55:68
+);
+
+  assign out = (a ^ b) & {4{enable}};	// test.cleaned.mlir:56:10, :57:10, :58:10, :59:5
+endmodule
+
+module bit_drop(	// test.cleaned.mlir:61:3
+  input  [3:0] in,	// test.cleaned.mlir:61:26
+  output [3:0] out	// test.cleaned.mlir:61:40
+);
+
+  wire _in_1;	// test.cleaned.mlir:73:10
+  wire _in_2;	// test.cleaned.mlir:72:10
+  wire _in_3;	// test.cleaned.mlir:71:10
+  assign _in_3 = in[3];	// test.cleaned.mlir:71:10
+  assign _in_2 = in[2];	// test.cleaned.mlir:72:10
+  assign _in_1 = in[1];	// test.cleaned.mlir:73:10
+  assign out = {_in_3, 3'h0} | {1'h0, {_in_2, 2'h0} | {1'h0, _in_1, 1'h0}};	// test.cleaned.mlir:62:14, :63:14, :64:14, :65:10, :66:10, :67:10, :68:10, :69:10, :70:10, :71:10, :72:10, :73:10, :74:5
+endmodule
+
+module bit_duplicate(	// test.cleaned.mlir:76:3
+  input  [3:0] in,	// test.cleaned.mlir:76:31
+  output [3:0] out	// test.cleaned.mlir:76:45
+);
+
+  wire _in_0;	// test.cleaned.mlir:91:11
+  wire _in_2;	// test.cleaned.mlir:90:11
+  wire _in_3;	// test.cleaned.mlir:89:10
+  assign _in_3 = in[3];	// test.cleaned.mlir:89:10
+  assign _in_2 = in[2];	// test.cleaned.mlir:90:11
+  assign _in_0 = in[0];	// test.cleaned.mlir:91:11
   assign out =
-    {_in_3, 3'h0} | {1'h0, {_in_2, 2'h0} | {1'h0, {_in_0, 1'h0} | {1'h0, _in_0}}};	// test.cleaned.mlir:50:14, :51:14, :52:14, :53:10, :54:10, :55:10, :56:10, :57:10, :58:10, :59:10, :60:10, :61:10, :62:10, :63:11, :64:11, :65:5
+    {_in_3, 3'h0} | {1'h0, {_in_2, 2'h0} | {1'h0, {_in_0, 1'h0} | {1'h0, _in_0}}};	// test.cleaned.mlir:77:14, :78:14, :79:14, :80:10, :81:10, :82:10, :83:10, :84:10, :85:10, :86:10, :87:10, :88:10, :89:10, :90:11, :91:11, :92:5
 endmodule
 
-module mixed_sources(	// test.cleaned.mlir:67:3
-  input  [3:0] in1,	// test.cleaned.mlir:67:31
-               in2,	// test.cleaned.mlir:67:45
-  output [7:0] out	// test.cleaned.mlir:67:60
+module mixed_sources(	// test.cleaned.mlir:94:3
+  input  [3:0] in1,	// test.cleaned.mlir:94:31
+               in2,	// test.cleaned.mlir:94:45
+  output [7:0] out	// test.cleaned.mlir:94:60
 );
 
-  assign out = {in1, 4'h0} | {4'h0, in2};	// test.cleaned.mlir:68:14, :69:10, :70:10, :71:10, :72:5
+  assign out = {in1, 4'h0} | {4'h0, in2};	// test.cleaned.mlir:95:14, :96:10, :97:10, :98:10, :99:5
 endmodule
 
-module with_logic_gate(	// test.cleaned.mlir:74:3
-  input  [3:0] in,	// test.cleaned.mlir:74:33
-  output [3:0] out	// test.cleaned.mlir:74:47
+module with_logic_gate(	// test.cleaned.mlir:101:3
+  input  [3:0] in,	// test.cleaned.mlir:101:33
+  output [3:0] out	// test.cleaned.mlir:101:47
 );
 
-  wire _GEN;	// test.cleaned.mlir:91:11
-  wire _in_1;	// test.cleaned.mlir:89:11
-  wire _in_2;	// test.cleaned.mlir:88:11
-  wire _in_3;	// test.cleaned.mlir:87:10
-  assign _in_3 = in[3];	// test.cleaned.mlir:87:10
-  assign _in_2 = in[2];	// test.cleaned.mlir:88:11
-  assign _in_1 = in[1];	// test.cleaned.mlir:89:11
-  assign _GEN = _in_1 ^ in[0];	// test.cleaned.mlir:89:11, :90:11, :91:11
+  wire _GEN;	// test.cleaned.mlir:118:11
+  wire _in_1;	// test.cleaned.mlir:116:11
+  wire _in_2;	// test.cleaned.mlir:115:11
+  wire _in_3;	// test.cleaned.mlir:114:10
+  assign _in_3 = in[3];	// test.cleaned.mlir:114:10
+  assign _in_2 = in[2];	// test.cleaned.mlir:115:11
+  assign _in_1 = in[1];	// test.cleaned.mlir:116:11
+  assign _GEN = _in_1 ^ in[0];	// test.cleaned.mlir:116:11, :117:11, :118:11
   assign out =
-    {_in_3, 3'h0} | {1'h0, {_in_2, 2'h0} | {1'h0, {_in_1, 1'h0} | {1'h0, _GEN}}};	// test.cleaned.mlir:75:14, :76:14, :77:14, :78:10, :79:10, :80:10, :81:10, :82:10, :83:10, :84:10, :85:10, :86:10, :87:10, :88:11, :89:11, :91:11, :92:5
+    {_in_3, 3'h0} | {1'h0, {_in_2, 2'h0} | {1'h0, {_in_1, 1'h0} | {1'h0, _GEN}}};	// test.cleaned.mlir:102:14, :103:14, :104:14, :105:10, :106:10, :107:10, :108:10, :109:10, :110:10, :111:10, :112:10, :113:10, :114:10, :115:11, :116:11, :118:11, :119:5
 endmodule
 

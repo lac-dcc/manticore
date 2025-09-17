@@ -21,55 +21,60 @@ void vectorizer::vectorize() {
     bool changed = false;
 
     for (Value oldOutputVal : outputOp->getOperands()) {
+        bool transformed = false;
         unsigned bitWidth = cast<IntegerType>(oldOutputVal.getType()).getWidth();
-        if (bit_arrays.find(oldOutputVal) == bit_arrays.end())
-            continue;
-        
-        bit_array &arr = bit_arrays[oldOutputVal];
 
-        if (arr.size() != bitWidth) {
-            continue; 
-        }
+        if (bit_arrays.count(oldOutputVal)) {
+            bit_array &arr = bit_arrays[oldOutputVal];
+            if (arr.size() == bitWidth) {
+                Value sourceInput = arr.getSingleSourceValue();
+                if (sourceInput) {
+                    std::vector<unsigned> currentPermutationMap;
+                    llvm::SmallDenseSet<unsigned> seen;
+                    bool hasDuplicate = false;
 
-        Value sourceInput = arr.getSingleSourceValue();
-        if (!sourceInput)
-            continue;
-        
-        if (arr.is_linear(bitWidth, sourceInput)) {
-            apply_linear_vectorization(oldOutputVal, sourceInput);
-            changed = true;
-        } 
-        else if (arr.is_reverse_and_linear(bitWidth, sourceInput)) {
-            apply_reverse_vectorization(builder, oldOutputVal, sourceInput);
-            changed = true;
-        } 
-        else {
-            std::vector<unsigned> currentPermutationMap;
-            currentPermutationMap.reserve(bitWidth);
-            for (unsigned i = 0; i < bitWidth; ++i)
-                currentPermutationMap.push_back(arr.get_bit(i).index);
-            
-            std::vector<bool> seen(bitWidth, false);
-            bool isFullPermutation = true;
-            for (unsigned idx : currentPermutationMap) {
-                if (idx >= bitWidth || seen[idx]) {
-                    isFullPermutation = false;
-                    break;
+                    for (unsigned i = 0; i < bitWidth; ++i) {
+                        unsigned idx = arr.get_bit(i).index;
+                        if (!seen.insert(idx).second) {
+                            hasDuplicate = true;
+                            break; 
+                        }
+                        currentPermutationMap.push_back(idx);
+                    }
+
+                    if (hasDuplicate) continue;
+
+                    if (isValidPermutation(currentPermutationMap, bitWidth)) {
+                        if (arr.is_linear(bitWidth, sourceInput)) {
+                            apply_linear_vectorization(oldOutputVal, sourceInput);
+                            transformed = true;
+                        } else if (arr.is_reverse_and_linear(bitWidth, sourceInput)) {
+                            apply_reverse_vectorization(builder, oldOutputVal, sourceInput);
+                            transformed = true;
+                        } else {
+                            apply_mix_vectorization(builder, oldOutputVal, sourceInput, currentPermutationMap);
+                            transformed = true;
+                        }
+                    }
                 }
-                seen[idx] = true;
-            }
-
-            if (isFullPermutation) {
-                apply_mix_vectorization(builder, oldOutputVal, sourceInput, currentPermutationMap);
-                changed = true;
             }
         }
+
+        if (!transformed) {
+            if (can_vectorize_structurally(oldOutputVal)) {
+                apply_structural_vectorization(builder, oldOutputVal);
+                transformed = true;
+            }
+        }
+
+        if (transformed) changed = true;
     }
 
     if (changed) {
         cleanup_dead_ops(block);
     }
 }
+
 
 void vectorizer::apply_linear_vectorization(Value oldOutputVal, Value sourceInput) {
     oldOutputVal.replaceAllUsesWith(sourceInput);
@@ -112,6 +117,177 @@ void vectorizer::apply_mix_vectorization(OpBuilder &builder, Value oldOutputVal,
     }
     
     oldOutputVal.replaceAllUsesWith(newOutputVal);
+}
+
+bool vectorizer::isValidPermutation(const std::vector<unsigned> &perm, unsigned bitWidth) {
+    if (perm.size() != bitWidth) return false;
+    std::vector<bool> seen(bitWidth, false);
+
+    for (unsigned idx : perm) {
+        if (idx >= bitWidth) return false;
+        if (seen[idx]) return false; 
+        seen[idx] = true;
+    }
+    return true;
+}
+
+bool vectorizer::can_vectorize_structurally(mlir::Value output) {
+    unsigned bitWidth = cast<IntegerType>(output.getType()).getWidth();
+    if (bitWidth <= 1) return false;
+
+    Value slice0Val = findBitSource(output, 0);
+    if (!slice0Val || !slice0Val.getDefiningOp()) return false;
+
+    for (unsigned i = 1; i < bitWidth; ++i) {
+        Value sliceNVal = findBitSource(output, i);
+        if (!sliceNVal || !sliceNVal.getDefiningOp()) return false;
+
+        llvm::DenseMap<mlir::Value, mlir::Value> map;
+        if (!areSubgraphsEquivalent(slice0Val, sliceNVal, i, map)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+mlir::Value vectorizer::vectorizeSubgraph(OpBuilder &builder, mlir::Value slice0Val, unsigned vectorWidth,
+                                          llvm::DenseMap<mlir::Value, mlir::Value> &vectorizedMap) {
+    if (vectorizedMap.count(slice0Val))
+        return vectorizedMap[slice0Val];
+
+    if (auto extractOp = dyn_cast_or_null<comb::ExtractOp>(slice0Val.getDefiningOp())) {
+        Value vector = extractOp.getInput();
+        vectorizedMap[slice0Val] = vector;
+        return vector;
+    }
+
+    if (mlir::isa<BlockArgument>(slice0Val) || mlir::isa<hw::ConstantOp>(slice0Val.getDefiningOp())) {
+        unsigned scalarWidth = cast<IntegerType>(slice0Val.getType()).getWidth();
+        if (scalarWidth == 1) {
+            return builder.create<comb::ReplicateOp>(slice0Val.getLoc(), builder.getIntegerType(vectorWidth), slice0Val);
+        }
+        return slice0Val;
+    }
+    
+    Operation *op0 = slice0Val.getDefiningOp();
+    if (!op0) return nullptr;
+    Location loc = op0->getLoc();
+
+    SmallVector<Value> vectorizedOperands;
+    for (Value operand : op0->getOperands()) {
+        Value vectorizedOperand = vectorizeSubgraph(builder, operand, vectorWidth, vectorizedMap);
+        if (!vectorizedOperand) return nullptr;
+        vectorizedOperands.push_back(vectorizedOperand);
+    }
+
+    Type resultType = builder.getIntegerType(vectorWidth);
+    Value vectorizedResult;
+
+    if (dyn_cast<comb::AndOp>(op0)) {
+        vectorizedResult = builder.create<comb::AndOp>(loc, resultType, vectorizedOperands);
+    } else if (dyn_cast<comb::OrOp>(op0)) {
+        vectorizedResult = builder.create<comb::OrOp>(loc, resultType, vectorizedOperands);
+    } else if (dyn_cast<comb::XorOp>(op0)) {
+        vectorizedResult = builder.create<comb::XorOp>(loc, resultType, vectorizedOperands);
+    } else if (dyn_cast<comb::AddOp>(op0)) {
+        vectorizedResult = builder.create<comb::AddOp>(loc, resultType, vectorizedOperands);
+    } else if (dyn_cast<comb::MuxOp>(op0)) {
+        Value sel = vectorizedOperands[0];
+        if (cast<IntegerType>(sel.getType()).getWidth() != 1) {
+           sel = builder.create<comb::ExtractOp>(loc, builder.getI1Type(), sel, 0);
+        }
+        Value replicatedSel = builder.create<comb::ReplicateOp>(loc, resultType, sel);
+        vectorizedResult = builder.create<comb::MuxOp>(loc, replicatedSel, vectorizedOperands[1], vectorizedOperands[2]);
+    } else {
+        return nullptr;
+    }
+    
+    vectorizedMap[slice0Val] = vectorizedResult;
+    return vectorizedResult;
+}
+
+void vectorizer::apply_structural_vectorization(OpBuilder &builder, mlir::Value oldOutputVal) {
+    unsigned bitWidth = cast<IntegerType>(oldOutputVal.getType()).getWidth();
+    Value slice0Val = findBitSource(oldOutputVal, 0);
+    if (!slice0Val) return;
+
+    llvm::DenseMap<mlir::Value, mlir::Value> vectorizedMap;
+    builder.setInsertionPoint(*oldOutputVal.getUsers().begin());
+
+    Value newOutputVal = vectorizeSubgraph(builder, slice0Val, bitWidth, vectorizedMap);
+    if (!newOutputVal) return;
+    
+    oldOutputVal.replaceAllUsesWith(newOutputVal);
+}
+
+
+bool vectorizer::areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value sliceNVal, unsigned sliceIndex,
+                                        llvm::DenseMap<mlir::Value, mlir::Value> &slice0ToNMap) {
+    if (slice0ToNMap.count(slice0Val))
+        return slice0ToNMap[slice0Val] == sliceNVal;
+
+    Operation *op0 = slice0Val.getDefiningOp();
+    Operation *opN = sliceNVal.getDefiningOp();
+
+    if (auto extract0 = dyn_cast_or_null<comb::ExtractOp>(op0)) {
+        auto extractN = dyn_cast_or_null<comb::ExtractOp>(opN);
+        if (extractN && extract0.getInput() == extractN.getInput() &&
+            extractN.getLowBit() == extract0.getLowBit() + sliceIndex) {
+            slice0ToNMap[slice0Val] = sliceNVal;
+            return true;
+        }
+    }
+
+    if (slice0Val == sliceNVal && (mlir::isa<BlockArgument>(slice0Val) || mlir::isa<hw::ConstantOp>(op0))) {
+        slice0ToNMap[slice0Val] = sliceNVal;
+        return true;
+    }
+
+    if (!op0 || !opN || op0->getName() != opN->getName() || op0->getNumOperands() != opN->getNumOperands())
+        return false;
+
+    for (unsigned i = 0; i < op0->getNumOperands(); ++i) {
+        if (!areSubgraphsEquivalent(op0->getOperand(i), opN->getOperand(i), sliceIndex, slice0ToNMap))
+            return false;
+    }
+
+    slice0ToNMap[slice0Val] = sliceNVal;
+    return true;
+}
+
+mlir::Value vectorizer::findBitSource(mlir::Value vectorVal, unsigned bitIndex) {
+    Operation *op = vectorVal.getDefiningOp();
+    if (!op) return nullptr;
+
+    if (op->getNumResults() == 1 && op->getResult(0).getType().isInteger(1)) {
+        return op->getResult(0);
+    }
+
+    if (auto concat = dyn_cast<comb::ConcatOp>(op)) {
+        unsigned currentBit = cast<IntegerType>(vectorVal.getType()).getWidth();
+        for (Value operand : concat.getInputs()) {
+            unsigned operandWidth = cast<IntegerType>(operand.getType()).getWidth();
+            currentBit -= operandWidth;
+            if (bitIndex >= currentBit && bitIndex < currentBit + operandWidth) {
+                return findBitSource(operand, bitIndex - currentBit);
+            }
+        }
+    } else if (auto orOp = dyn_cast<comb::OrOp>(op)) {
+        if (auto source = findBitSource(orOp.getInputs()[1], bitIndex)) {
+             if (!mlir::isa<hw::ConstantOp>(source.getDefiningOp()) || 
+                 !cast<hw::ConstantOp>(source.getDefiningOp()).getValue().isZero())
+                return source;
+        }
+        return findBitSource(orOp.getInputs()[0], bitIndex);
+    } else if (auto andOp = dyn_cast<comb::AndOp>(op)) {
+        mlir::Value lhs = andOp.getInputs()[0];
+        mlir::Value rhs = andOp.getInputs()[1];
+        if (mlir::isa<hw::ConstantOp>(rhs.getDefiningOp()))
+            return findBitSource(lhs, bitIndex);
+        if (mlir::isa<hw::ConstantOp>(lhs.getDefiningOp()))
+            return findBitSource(rhs, bitIndex);
+    }
+    return nullptr;
 }
 
 void vectorizer::cleanup_dead_ops(Block &block) {

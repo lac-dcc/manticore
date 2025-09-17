@@ -29,6 +29,15 @@ public:
   hw::HWModuleOp module;
   llvm::DenseMap<mlir::Value, bit_array> bit_arrays;
 
+  mlir::Value findBitSource(mlir::Value vectorVal, unsigned bitIndex);
+  mlir::Value vectorizeSubgraph(OpBuilder &builder, mlir::Value slice0Val, unsigned vectorWidth,
+                                          llvm::DenseMap<mlir::Value, mlir::Value> &vectorizedMap);
+
+  bool can_vectorize_structurally(mlir::Value output);
+  bool areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value sliceNVal, unsigned sliceIndex,
+                                        llvm::DenseMap<mlir::Value, mlir::Value> &slice0ToNMap);
+  bool isValidPermutation(const std::vector<unsigned> &perm, unsigned bitWidth);
+
   void process_extract_ops();
   void process_concat_ops();
 
@@ -41,6 +50,7 @@ public:
   void apply_linear_vectorization(mlir::Value oldOutputVal, mlir::Value sourceInput);
   void apply_reverse_vectorization(mlir::OpBuilder &builder, mlir::Value oldOutputVal, mlir::Value sourceInput);
   void apply_mix_vectorization(mlir::OpBuilder &builder, mlir::Value oldOutputVal, mlir::Value sourceInput, const std::vector<unsigned> &map);
+  void apply_structural_vectorization(OpBuilder &builder, mlir::Value oldOutputVal);
 
   void clean_hw_module(Block& body, OpBuilder& op_builder, Location& loc);
   void cleanup_dead_ops(Block& body);
