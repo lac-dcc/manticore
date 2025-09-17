@@ -257,8 +257,6 @@ mlir::Value vectorizer::vectorizeSubgraph(OpBuilder &builder, mlir::Value slice0
         vectorizedResult = builder.create<comb::OrOp>(loc, resultType, vectorizedOperands);
     } else if (dyn_cast<comb::XorOp>(op0)) {
         vectorizedResult = builder.create<comb::XorOp>(loc, resultType, vectorizedOperands);
-    } else if (dyn_cast<comb::AddOp>(op0)) {
-        vectorizedResult = builder.create<comb::AddOp>(loc, resultType, vectorizedOperands);
     } else if (dyn_cast<comb::MuxOp>(op0)) {
         Value sel = vectorizedOperands[0];
         if (cast<IntegerType>(sel.getType()).getWidth() != 1) {
