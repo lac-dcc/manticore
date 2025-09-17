@@ -2,13 +2,15 @@ rm -rf jgproject
 
 tcl_file="$1"
 
-start=$(date +%s%N)
-mem=$(/usr/bin/time -f "%M" jg -no_gui -allow_unsupported_OS -tcl $tcl_file 2>&1 >/dev/null | tail -n 1) 
-end=$(date +%s%N)
-nano_seconds=$((end-start))
+mem=$(jg -no_gui -tcl $tcl_file -allow_unsupported_OS) 
 
-echo "$nano_seconds $mem"
+analyze_time=$(echo "$mem" | grep -oP 'TIME_ANALYZE:\s*\K[0-9]+(\.[0-9]*)?')
+elaborate_time=$(echo "$mem" | grep -oP 'TIME_ELABORATE:\s*\K[0-9]+(\.[0-9]*)?')
+memory_consumed=$(echo "$mem" | grep -oP 'MEMORY_CONSUMED:\s*\K[0-9]+(\.[0-9]*)?')
 
+echo $analyze_time 
+echo $elaborate_time 
+echo $memory_consumed 
 
 
 
