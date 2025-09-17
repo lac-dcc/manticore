@@ -30,19 +30,9 @@ void vectorizer::vectorize() {
                 Value sourceInput = arr.getSingleSourceValue();
                 if (sourceInput) {
                     std::vector<unsigned> currentPermutationMap;
-                    llvm::SmallDenseSet<unsigned> seen;
-                    bool hasDuplicate = false;
-
                     for (unsigned i = 0; i < bitWidth; ++i) {
-                        unsigned idx = arr.get_bit(i).index;
-                        if (!seen.insert(idx).second) {
-                            hasDuplicate = true;
-                            break; 
-                        }
-                        currentPermutationMap.push_back(idx);
+                        currentPermutationMap.push_back(arr.get_bit(i).index);
                     }
-
-                    if (hasDuplicate) continue;
 
                     if (isValidPermutation(currentPermutationMap, bitWidth)) {
                         if (arr.is_linear(bitWidth, sourceInput)) {
@@ -55,6 +45,9 @@ void vectorizer::vectorize() {
                             apply_mix_vectorization(builder, oldOutputVal, sourceInput, currentPermutationMap);
                             transformed = true;
                         }
+                    } else {
+                        apply_mix_vectorization(builder, oldOutputVal, sourceInput, currentPermutationMap);
+                        transformed = true;
                     }
                 }
             }
@@ -332,7 +325,10 @@ bool vectorizer::areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value slice
 
 mlir::Value vectorizer::findBitSource(mlir::Value vectorVal, unsigned bitIndex) {
     Operation *op = vectorVal.getDefiningOp();
-    if (!op) return nullptr;
+
+    if (!op) {
+        return nullptr;
+    }
 
     if (op->getNumResults() == 1 && op->getResult(0).getType().isInteger(1)) {
         return op->getResult(0);
@@ -347,17 +343,28 @@ mlir::Value vectorizer::findBitSource(mlir::Value vectorVal, unsigned bitIndex) 
                 return findBitSource(operand, bitIndex - currentBit);
             }
         }
-    } else if (auto orOp = dyn_cast<comb::OrOp>(op)) {
+    } 
+    else if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
+        OpBuilder builder(op->getContext());
+        builder.setInsertionPoint(op); 
+        APInt value = constOp.getValue();
+        uint64_t bitValue = (bitIndex < value.getBitWidth()) ? value.getZExtValue() >> bitIndex & 1 : 0;
+        
+        IntegerAttr constAttr = builder.getIntegerAttr(builder.getI1Type(), bitValue);
+        return builder.create<hw::ConstantOp>(constOp.getLoc(), constAttr);
+    }
+    else if (auto orOp = dyn_cast<comb::OrOp>(op)) {
         if (auto source = findBitSource(orOp.getInputs()[1], bitIndex)) {
              if (!mlir::isa<hw::ConstantOp>(source.getDefiningOp()) || 
                  !cast<hw::ConstantOp>(source.getDefiningOp()).getValue().isZero())
                 return source;
         }
         return findBitSource(orOp.getInputs()[0], bitIndex);
-    } else if (auto andOp = dyn_cast<comb::AndOp>(op)) {
+    } 
+    else if (auto andOp = dyn_cast<comb::AndOp>(op)) {
         mlir::Value lhs = andOp.getInputs()[0];
         mlir::Value rhs = andOp.getInputs()[1];
-        if (mlir::isa<hw::ConstantOp>(rhs.getDefiningOp()))
+        if (mlir::isa<hw::ConstantOp>(rhs.getDefiningOp())) 
             return findBitSource(lhs, bitIndex);
         if (mlir::isa<hw::ConstantOp>(lhs.getDefiningOp()))
             return findBitSource(rhs, bitIndex);

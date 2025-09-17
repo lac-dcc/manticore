@@ -67,37 +67,17 @@ module {
     hw.output %4 : i4
   }
   hw.module @bit_drop(in %in : i4, out out : i4) {
-    %c0_i3 = hw.constant 0 : i3
-    %c0_i2 = hw.constant 0 : i2
     %false = hw.constant false
-    %0 = comb.concat %7, %c0_i2 : i1, i2
-    %1 = comb.concat %false, %8, %false : i1, i1, i1
-    %2 = comb.or %0, %1 : i3
-    %3 = comb.concat %false, %2 : i1, i3
-    %4 = comb.concat %6, %c0_i3 : i1, i3
-    %5 = comb.or %4, %3 : i4
-    %6 = comb.extract %in from 3 : (i4) -> i1
-    %7 = comb.extract %in from 2 : (i4) -> i1
-    %8 = comb.extract %in from 1 : (i4) -> i1
-    hw.output %5 : i4
+    %0 = comb.extract %in from 1 : (i4) -> i3
+    %1 = comb.concat %0, %false : i3, i1
+    hw.output %1 : i4
   }
   hw.module @bit_duplicate(in %in : i4, out out : i4) {
-    %c0_i2 = hw.constant 0 : i2
-    %false = hw.constant false
-    %c0_i3 = hw.constant 0 : i3
-    %0 = comb.concat %11, %false : i1, i1
-    %1 = comb.concat %false, %11 : i1, i1
-    %2 = comb.or %0, %1 : i2
-    %3 = comb.concat %10, %c0_i2 : i1, i2
-    %4 = comb.concat %false, %2 : i1, i2
-    %5 = comb.or %3, %4 : i3
-    %6 = comb.concat %false, %5 : i1, i3
-    %7 = comb.concat %9, %c0_i3 : i1, i3
-    %8 = comb.or %7, %6 : i4
-    %9 = comb.extract %in from 3 : (i4) -> i1
-    %10 = comb.extract %in from 2 : (i4) -> i1
-    %11 = comb.extract %in from 0 : (i4) -> i1
-    hw.output %8 : i4
+    %0 = comb.extract %in from 0 : (i4) -> i1
+    %1 = comb.extract %in from 2 : (i4) -> i2
+    %2 = comb.replicate %0 : (i1) -> i2
+    %3 = comb.concat %1, %2 : i2, i2
+    hw.output %3 : i4
   }
   hw.module @mixed_sources(in %in1 : i4, in %in2 : i4, out out : i8) {
     %c0_i4 = hw.constant 0 : i4

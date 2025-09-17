@@ -70,42 +70,29 @@ module {
     hw.output %4 : i4
   }
   hw.module @bit_drop(in %in : i4, out out : i4) {
-    %c0_i3 = hw.constant 0 : i3
-    %c7_i4 = hw.constant 7 : i4
-    %c0_i2 = hw.constant 0 : i2
     %false = hw.constant false
-    %0 = comb.concat %c0_i2, %8, %false : i2, i1, i1
-    %1 = comb.concat %false, %7, %c0_i2 : i1, i1, i2
-    %2 = comb.or %1, %0 : i4
-    %3 = comb.and %2, %c7_i4 : i4
-    %4 = comb.concat %6, %c0_i3 : i1, i3
-    %5 = comb.or %4, %3 : i4
-    %6 = comb.extract %in from 3 : (i4) -> i1
-    %7 = comb.extract %in from 2 : (i4) -> i1
-    %8 = comb.extract %in from 1 : (i4) -> i1
-    hw.output %5 : i4
+    %0 = comb.extract %in from 1 : (i4) -> i3
+    %1 = comb.concat %0, %false : i3, i1
+    hw.output %1 : i4
   }
   hw.module @bit_duplicate(in %in : i4, out out : i4) {
-    %c0_i2 = hw.constant 0 : i2
-    %false = hw.constant false
-    %c7_i4 = hw.constant 7 : i4
-    %c-5_i4 = hw.constant -5 : i4
-    %c0_i3 = hw.constant 0 : i3
-    %0 = comb.concat %c0_i3, %11 : i3, i1
-    %1 = comb.concat %c0_i2, %11, %false : i2, i1, i1
-    %2 = comb.or %1, %0 : i4
-    %3 = comb.and %2, %c-5_i4 : i4
-    %4 = comb.concat %false, %10, %c0_i2 : i1, i1, i2
-    %5 = comb.or %4, %3 : i4
-    %6 = comb.and %5, %c7_i4 : i4
-    %7 = comb.concat %9, %c0_i3 : i1, i3
-    %8 = comb.or %7, %6 : i4
-    %9 = comb.extract %in from 3 : (i4) -> i1
-    %10 = comb.extract %in from 2 : (i4) -> i1
-    %11 = comb.extract %in from 0 : (i4) -> i1
-    hw.output %8 : i4
+    %0 = comb.extract %in from 0 : (i4) -> i1
+    %1 = comb.extract %in from 0 : (i4) -> i1
+    %2 = comb.extract %in from 2 : (i4) -> i2
+    %3 = comb.concat %2, %1, %0 : i2, i1, i1
+    hw.output %3 : i4
   }
   hw.module @mixed_sources(in %in1 : i4, in %in2 : i4, out out : i8) {
+    %false = hw.constant false
+    %false_0 = hw.constant false
+    %false_1 = hw.constant false
+    %false_2 = hw.constant false
+    %false_3 = hw.constant false
+    %false_4 = hw.constant false
+    %false_5 = hw.constant false
+    %false_6 = hw.constant false
+    %false_7 = hw.constant false
+    %false_8 = hw.constant false
     %c0_i4 = hw.constant 0 : i4
     %0 = comb.concat %c0_i4, %in2 : i4, i4
     %1 = comb.concat %in1, %c0_i4 : i4, i4

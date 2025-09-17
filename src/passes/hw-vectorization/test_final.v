@@ -110,36 +110,23 @@ module bit_drop(	// test.cleaned.mlir:69:3
   output [3:0] out	// test.cleaned.mlir:69:40
 );
 
-  wire _in_1;	// test.cleaned.mlir:81:10
-  wire _in_2;	// test.cleaned.mlir:80:10
-  wire _in_3;	// test.cleaned.mlir:79:10
-  assign _in_3 = in[3];	// test.cleaned.mlir:79:10
-  assign _in_2 = in[2];	// test.cleaned.mlir:80:10
-  assign _in_1 = in[1];	// test.cleaned.mlir:81:10
-  assign out = {_in_3, 3'h0} | {1'h0, {_in_2, 2'h0} | {1'h0, _in_1, 1'h0}};	// test.cleaned.mlir:70:14, :71:14, :72:14, :73:10, :74:10, :75:10, :76:10, :77:10, :78:10, :79:10, :80:10, :81:10, :82:5
+  assign out = {in[3:1], 1'h0};	// test.cleaned.mlir:70:14, :71:10, :72:10, :73:5
 endmodule
 
-module bit_duplicate(	// test.cleaned.mlir:84:3
-  input  [3:0] in,	// test.cleaned.mlir:84:31
-  output [3:0] out	// test.cleaned.mlir:84:45
+module bit_duplicate(	// test.cleaned.mlir:75:3
+  input  [3:0] in,	// test.cleaned.mlir:75:31
+  output [3:0] out	// test.cleaned.mlir:75:45
 );
 
-  wire _in_0;	// test.cleaned.mlir:99:11
-  wire _in_2;	// test.cleaned.mlir:98:11
-  wire _in_3;	// test.cleaned.mlir:97:10
-  assign _in_3 = in[3];	// test.cleaned.mlir:97:10
-  assign _in_2 = in[2];	// test.cleaned.mlir:98:11
-  assign _in_0 = in[0];	// test.cleaned.mlir:99:11
-  assign out =
-    {_in_3, 3'h0} | {1'h0, {_in_2, 2'h0} | {1'h0, {_in_0, 1'h0} | {1'h0, _in_0}}};	// test.cleaned.mlir:85:14, :86:14, :87:14, :88:10, :89:10, :90:10, :91:10, :92:10, :93:10, :94:10, :95:10, :96:10, :97:10, :98:11, :99:11, :100:5
+  assign out = {in[3:2], {2{in[0]}}};	// test.cleaned.mlir:76:10, :77:10, :78:10, :79:10, :80:5
 endmodule
 
-module mixed_sources(	// test.cleaned.mlir:102:3
-  input  [3:0] in1,	// test.cleaned.mlir:102:31
-               in2,	// test.cleaned.mlir:102:45
-  output [7:0] out	// test.cleaned.mlir:102:60
+module mixed_sources(	// test.cleaned.mlir:82:3
+  input  [3:0] in1,	// test.cleaned.mlir:82:31
+               in2,	// test.cleaned.mlir:82:45
+  output [7:0] out	// test.cleaned.mlir:82:60
 );
 
-  assign out = {in1, 4'h0} | {4'h0, in2};	// test.cleaned.mlir:103:14, :104:10, :105:10, :106:10, :107:5
+  assign out = {in1, 4'h0} | {4'h0, in2};	// test.cleaned.mlir:83:14, :84:10, :85:10, :86:10, :87:5
 endmodule
 
