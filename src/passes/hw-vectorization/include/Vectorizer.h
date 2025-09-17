@@ -37,6 +37,7 @@ public:
   bool areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value sliceNVal, unsigned sliceIndex,
                                         llvm::DenseMap<mlir::Value, mlir::Value> &slice0ToNMap);
   bool isValidPermutation(const std::vector<unsigned> &perm, unsigned bitWidth);
+  bool can_apply_partial_vectorization(Value oldOutputVal);
 
   void process_extract_ops();
   void process_concat_ops();
@@ -51,6 +52,7 @@ public:
   void apply_reverse_vectorization(mlir::OpBuilder &builder, mlir::Value oldOutputVal, mlir::Value sourceInput);
   void apply_mix_vectorization(mlir::OpBuilder &builder, mlir::Value oldOutputVal, mlir::Value sourceInput, const std::vector<unsigned> &map);
   void apply_structural_vectorization(OpBuilder &builder, mlir::Value oldOutputVal);
+  void apply_partial_vectorization(OpBuilder &builder, mlir::Value oldOutputVal);
 
   void clean_hw_module(Block& body, OpBuilder& op_builder, Location& loc);
   void cleanup_dead_ops(Block& body);

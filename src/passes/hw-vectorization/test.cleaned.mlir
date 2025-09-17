@@ -58,6 +58,14 @@ module {
     %2 = comb.and %0, %1 : i4
     hw.output %2 : i4
   }
+  hw.module @with_logic_gate(in %in : i4, out out : i4) {
+    %0 = comb.extract %in from 1 : (i4) -> i1
+    %1 = comb.extract %in from 0 : (i4) -> i1
+    %2 = comb.xor %0, %1 : i1
+    %3 = comb.extract %in from 1 : (i4) -> i3
+    %4 = comb.concat %3, %2 : i3, i1
+    hw.output %4 : i4
+  }
   hw.module @bit_drop(in %in : i4, out out : i4) {
     %c0_i3 = hw.constant 0 : i3
     %c0_i2 = hw.constant 0 : i2
@@ -97,26 +105,6 @@ module {
     %1 = comb.concat %in1, %c0_i4 : i4, i4
     %2 = comb.or %1, %0 : i8
     hw.output %2 : i8
-  }
-  hw.module @with_logic_gate(in %in : i4, out out : i4) {
-    %c0_i2 = hw.constant 0 : i2
-    %false = hw.constant false
-    %c0_i3 = hw.constant 0 : i3
-    %0 = comb.concat %11, %false : i1, i1
-    %1 = comb.concat %false, %13 : i1, i1
-    %2 = comb.or %0, %1 : i2
-    %3 = comb.concat %10, %c0_i2 : i1, i2
-    %4 = comb.concat %false, %2 : i1, i2
-    %5 = comb.or %3, %4 : i3
-    %6 = comb.concat %false, %5 : i1, i3
-    %7 = comb.concat %9, %c0_i3 : i1, i3
-    %8 = comb.or %7, %6 : i4
-    %9 = comb.extract %in from 3 : (i4) -> i1
-    %10 = comb.extract %in from 2 : (i4) -> i1
-    %11 = comb.extract %in from 1 : (i4) -> i1
-    %12 = comb.extract %in from 0 : (i4) -> i1
-    %13 = comb.xor %11, %12 : i1
-    hw.output %8 : i4
   }
 }
 

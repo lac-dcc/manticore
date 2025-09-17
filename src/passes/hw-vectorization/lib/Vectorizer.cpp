@@ -67,14 +67,89 @@ void vectorizer::vectorize() {
             }
         }
 
+        if (!transformed && can_apply_partial_vectorization(oldOutputVal)) {
+            apply_partial_vectorization(builder, oldOutputVal);
+            transformed = true;
+        }
+
         if (transformed) changed = true;
-    }
+    
 
     if (changed) {
         cleanup_dead_ops(block);
     }
+    }
 }
 
+bool vectorizer::can_apply_partial_vectorization(Value oldOutputVal) {
+    unsigned bitWidth = cast<IntegerType>(oldOutputVal.getType()).getWidth();
+    if (bitWidth <= 1) return false;
+
+    for (unsigned i = 0; i < bitWidth; ++i) {
+        if (!findBitSource(oldOutputVal, i)) {
+            return false; 
+        }
+    }
+
+    return true;
+}
+
+void vectorizer::apply_partial_vectorization(OpBuilder &builder, mlir::Value oldOutputVal) {
+    unsigned bitWidth = cast<IntegerType>(oldOutputVal.getType()).getWidth();
+    Location loc = oldOutputVal.getLoc();
+
+    if (oldOutputVal.use_empty())
+        return;
+
+    builder.setInsertionPoint(*oldOutputVal.getUsers().begin());
+
+    SmallVector<Value> chunks;
+
+    for (int i = bitWidth - 1; i >= 0;) {
+        Value bitSource = findBitSource(oldOutputVal, i);
+        if (!bitSource)
+            return; 
+
+        Operation* sourceOp = bitSource.getDefiningOp();
+        int len = 1;
+
+        if (auto extractOp = dyn_cast_or_null<comb::ExtractOp>(sourceOp)) {
+            while ((i - len) >= 0) {
+                Value nextBitSource = findBitSource(oldOutputVal, i - len);
+                auto nextExtractOp = dyn_cast_or_null<comb::ExtractOp>(nextBitSource.getDefiningOp());
+
+                if (nextExtractOp &&
+                    nextExtractOp.getInput() == extractOp.getInput() &&
+                    nextExtractOp.getLowBit() == extractOp.getLowBit() - len) {
+                    len++;
+                } else {
+                    break;
+                }
+            }
+
+            Value sourceVec = extractOp.getInput();
+            unsigned extractLowBit = extractOp.getLowBit() - (len - 1);
+            Value extractedChunk = builder.create<comb::ExtractOp>(
+                loc, builder.getIntegerType(len), sourceVec,
+                builder.getI32IntegerAttr(extractLowBit));
+            chunks.push_back(extractedChunk);
+        } else {
+            chunks.push_back(bitSource);
+        }
+
+        i -= len;
+    }
+
+    if (chunks.size() == 1 &&
+        cast<IntegerType>(chunks[0].getType()).getWidth() == bitWidth) {
+        oldOutputVal.replaceAllUsesWith(chunks[0]);
+        return;
+    }
+
+    Value newOutputVal = builder.create<comb::ConcatOp>(loc, chunks);
+
+    oldOutputVal.replaceAllUsesWith(newOutputVal);
+}
 
 void vectorizer::apply_linear_vectorization(Value oldOutputVal, Value sourceInput) {
     oldOutputVal.replaceAllUsesWith(sourceInput);
@@ -286,7 +361,8 @@ mlir::Value vectorizer::findBitSource(mlir::Value vectorVal, unsigned bitIndex) 
             return findBitSource(lhs, bitIndex);
         if (mlir::isa<hw::ConstantOp>(lhs.getDefiningOp()))
             return findBitSource(rhs, bitIndex);
-    }
+    } 
+    
     return nullptr;
 }
 
