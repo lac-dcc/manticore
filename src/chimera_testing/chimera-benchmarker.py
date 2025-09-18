@@ -20,6 +20,8 @@ class ChimeraBenchmarker:
         for statistic in non_vectorized_statistics:
             concated = prefix_non_vectorized + statistic
             self.statistics_df.loc[len(self.statistics_df)] = concated
+
+        self.statistics_df.to_csv("output.csv", index=True)
     
     def benchmark(self):
         design_list = [f for f in os.listdir("../../designs/real-vectorized") 
@@ -30,7 +32,6 @@ class ChimeraBenchmarker:
             vectorized_statistics, non_vectorized_statistics = design_benchmarker.benchmark() 
             self.update_statistics(design, vectorized_statistics, non_vectorized_statistics)
 
-        self.statistics_df.to_csv("output.csv", index=True)
 
 
 aux = ChimeraBenchmarker(2)
