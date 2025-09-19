@@ -271,6 +271,35 @@ module {
     %37 = comb.and %27, %36 : i1
     hw.output %8, %17 : i4, i4
   }
+  hw.module @test_multiple_patterns2(in %a : i4, in %b : i4, out out_xor : i4) {
+    %c0_i2 = hw.constant 0 : i2
+    %false = hw.constant false
+    %c7_i4 = hw.constant 7 : i4
+    %c-5_i4 = hw.constant -5 : i4
+    %c0_i3 = hw.constant 0 : i3
+    %0 = comb.concat %c0_i3, %20 : i3, i1
+    %1 = comb.concat %c0_i2, %17, %false : i2, i1, i1
+    %2 = comb.or %1, %0 : i4
+    %3 = comb.and %2, %c-5_i4 : i4
+    %4 = comb.concat %false, %14, %c0_i2 : i1, i1, i2
+    %5 = comb.or %4, %3 : i4
+    %6 = comb.and %5, %c7_i4 : i4
+    %7 = comb.concat %11, %c0_i3 : i1, i3
+    %8 = comb.or %7, %6 : i4
+    %9 = comb.extract %a from 3 : (i4) -> i1
+    %10 = comb.extract %b from 0 : (i4) -> i1
+    %11 = comb.xor %9, %10 : i1
+    %12 = comb.extract %a from 2 : (i4) -> i1
+    %13 = comb.extract %b from 1 : (i4) -> i1
+    %14 = comb.xor %12, %13 : i1
+    %15 = comb.extract %a from 1 : (i4) -> i1
+    %16 = comb.extract %b from 2 : (i4) -> i1
+    %17 = comb.xor %15, %16 : i1
+    %18 = comb.extract %a from 0 : (i4) -> i1
+    %19 = comb.extract %b from 3 : (i4) -> i1
+    %20 = comb.xor %18, %19 : i1
+    hw.output %8 : i4
+  }
   hw.module @test_add(in %a : i4, in %b : i4, out o : i4) {
     %c0_i2 = hw.constant 0 : i2
     %false = hw.constant false

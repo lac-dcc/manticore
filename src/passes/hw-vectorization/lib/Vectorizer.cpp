@@ -286,7 +286,6 @@ void vectorizer::apply_structural_vectorization(OpBuilder &builder, mlir::Value 
     oldOutputVal.replaceAllUsesWith(newOutputVal);
 }
 
-
 bool vectorizer::areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value sliceNVal, unsigned sliceIndex,
                                         llvm::DenseMap<mlir::Value, mlir::Value> &slice0ToNMap) {
     if (slice0ToNMap.count(slice0Val))
@@ -297,10 +296,14 @@ bool vectorizer::areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value slice
 
     if (auto extract0 = dyn_cast_or_null<comb::ExtractOp>(op0)) {
         auto extractN = dyn_cast_or_null<comb::ExtractOp>(opN);
-        if (extractN && extract0.getInput() == extractN.getInput() &&
-            extractN.getLowBit() == extract0.getLowBit() + sliceIndex) {
-            slice0ToNMap[slice0Val] = sliceNVal;
-            return true;
+        if (auto extract0 = dyn_cast_or_null<comb::ExtractOp>(op0)) {
+            auto extractN = dyn_cast_or_null<comb::ExtractOp>(opN);
+            if (extractN && extract0.getInput() == extractN.getInput() &&
+                extractN.getLowBit() == extract0.getLowBit() + sliceIndex) {
+                slice0ToNMap[slice0Val] = sliceNVal;
+                return true;
+            }
+            return false;
         }
     }
 

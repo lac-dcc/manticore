@@ -74,6 +74,16 @@ module test_multiple_patterns(
   assign out_and[0] = a[0] & c[0];
 endmodule
 
+module test_multiple_patterns2(
+  output wire [3:0] out_xor,
+  input wire [3:0] a, b
+);
+  assign out_xor[3] = a[3] ^ b[0];
+  assign out_xor[2] = a[2] ^ b[1];
+  assign out_xor[1] = a[1] ^ b[2];
+  assign out_xor[0] = a[0] ^ b[3];
+endmodule
+
 module test_add(output wire [3:0] o, input wire [3:0] a, b);
   assign o[3] = a[3] + b[3];
   assign o[2] = a[2] + b[2];
@@ -178,8 +188,6 @@ module VectorizedEnable(
   assign o[0] = a[0] & enable[0];
   
 endmodule
-
-// Should not vectorize
 
 module mixed_sources(
     output wire [7:0] out,
