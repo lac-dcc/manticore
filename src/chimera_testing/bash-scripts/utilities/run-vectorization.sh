@@ -1,19 +1,21 @@
 #!/bin/bash
 
 # Base file name (without extension)
-file_path=$1
-placeholder="file"
 
-circt-verilog --ir-moore ${file_path} -o ${placeholder}.moore.mlir
+file=$1
+file_base_name=$(basename $file)
 
+# echo "Converting Verilog to IR Moore..."
+circt-verilog --ir-hw $file -o ${file_base_name}.hw.mlir
 
-circt-opt ${placeholder}.moore.mlir \
+# echo "Running vectorization pass..."
+circt-opt ${file_base_name}.hw.mlir \
   --pass-pipeline="builtin.module(simple-vec)" \
-  --load-pass-plugin=./../passes/Vectorization/VectorizePass.so \
-  -o ${placeholder}.after_pass.mlir
+  --load-pass-plugin=./../passes/hw-vectorization/build/VectorizePass.so \
+  -o ${file_base_name}.after_pass.mlir
 
-circt-opt --convert-moore-to-core ${placeholder}.after_pass.mlir -o ${placeholder}.core.mlir
 
+# echo "Cleaning and optimizing IR..."
 circt-opt \
   --llhd-desequentialize \
   --llhd-hoist-signals \
@@ -22,13 +24,14 @@ circt-opt \
   --llhd-process-lowering \
   --cse \
   --canonicalize \
-  ${placeholder}.core.mlir -o ${placeholder}.cleaned.mlir
+  --hw-cleanup    \
+  ${file_base_name}.after_pass.mlir -o ${file_base_name}.cleaned.mlir
 
+# Step 5: Generate final Verilog
+# echo "Generating final Verilog..."
 
-file_name=$(basename "$file_path")
+firtool ${file_base_name}.cleaned.mlir --verilog -o $file
 
-# firtool ${placeholder}.cleaned.mlir --verilog -o "/home/ullas/manticore/manticore/designs/vectorized/${file_name}"
-# firtool ${placeholder}.cleaned.mlir --verilog -o "${file_name}"
+# echo "Pipeline completed! Verilog generated in ${BASE_NAME}_final.v"
 
 rm *.mlir
-

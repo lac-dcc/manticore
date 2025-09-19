@@ -34,7 +34,7 @@ class ChimeraBenchmarker:
 
 
 
-aux = ChimeraBenchmarker(2)
+aux = ChimeraBenchmarker(100)
 aux.benchmark()
 
 

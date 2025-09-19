@@ -1,6 +1,6 @@
 LLVM_PREFIX ?= /usr/local
 MLIR_PREFIX ?= /usr/local
-CIRCT_PREFIX ?= /home/mariaguimaraes/projects/circt/
+CIRCT_PREFIX ?= /home/ullas/manticore/circt
 
 LLVM_CONFIG := $(LLVM_PREFIX)/bin/llvm-config
 CLANG       := clang++
@@ -46,4 +46,5 @@ $(OBJDIR)/%.o: lib/%.cpp
 clean:
 	@echo "Limpando arquivos gerados..."
 	rm -rf $(OBJDIR)
+
 
