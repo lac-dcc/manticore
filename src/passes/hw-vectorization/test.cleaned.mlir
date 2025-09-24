@@ -6,6 +6,10 @@ module {
     %0 = comb.reverse %in : i4
     hw.output %0 : i4
   }
+  hw.module @linear_and_reverse(in %in : i8, in %in2 : i4, out out : i8, out out2 : i4) {
+    %0 = comb.reverse %in2 : i4
+    hw.output %in, %0 : i8, i4
+  }
   hw.module @bit_mixing_vectorization(in %in2 : i4, in %in : i8, out out2 : i4, out out : i8) {
     %0 = comb.extract %in2 from 1 : (i4) -> i3
     %1 = comb.extract %in2 from 0 : (i4) -> i1
@@ -17,10 +21,6 @@ module {
     %7 = comb.extract %in from 6 : (i8) -> i2
     %8 = comb.concat %7, %6, %5, %4, %3 : i2, i1, i1, i1, i3
     hw.output %2, %8 : i4, i8
-  }
-  hw.module @linear_and_reverse(in %in : i8, in %in2 : i4, out out : i8, out out2 : i4) {
-    %0 = comb.reverse %in2 : i4
-    hw.output %in, %0 : i8, i4
   }
   hw.module @test_mux(in %a : i4, in %b : i4, in %sel : i1, out result : i4) {
     %c-1_i4 = hw.constant -1 : i4
@@ -41,7 +41,7 @@ module {
     %1 = comb.and %a, %c : i4
     hw.output %0, %1 : i4, i4
   }
-  hw.module @test_multiple_patterns2(in %a : i4, in %b : i4, out out_xor : i4) {
+  hw.module @test_multiple_patterns_reverse(in %a : i4, in %b : i4, out out_xor : i4) {
     %0 = comb.extract %a from 3 : (i4) -> i1
     %1 = comb.extract %b from 0 : (i4) -> i1
     %2 = comb.xor %0, %1 : i1
@@ -56,33 +56,6 @@ module {
     %11 = comb.xor %9, %10 : i1
     %12 = comb.concat %2, %5, %8, %11 : i1, i1, i1, i1
     hw.output %12 : i4
-  }
-  hw.module @test_add(in %a : i4, in %b : i4, out o : i4) {
-    %c0_i2 = hw.constant 0 : i2
-    %false = hw.constant false
-    %c0_i3 = hw.constant 0 : i3
-    %0 = comb.concat %17, %false : i1, i1
-    %1 = comb.concat %false, %20 : i1, i1
-    %2 = comb.or %0, %1 : i2
-    %3 = comb.concat %14, %c0_i2 : i1, i2
-    %4 = comb.concat %false, %2 : i1, i2
-    %5 = comb.or %3, %4 : i3
-    %6 = comb.concat %false, %5 : i1, i3
-    %7 = comb.concat %11, %c0_i3 : i1, i3
-    %8 = comb.or %7, %6 : i4
-    %9 = comb.extract %a from 3 : (i4) -> i1
-    %10 = comb.extract %b from 3 : (i4) -> i1
-    %11 = comb.add %9, %10 : i1
-    %12 = comb.extract %a from 2 : (i4) -> i1
-    %13 = comb.extract %b from 2 : (i4) -> i1
-    %14 = comb.add %12, %13 : i1
-    %15 = comb.extract %a from 1 : (i4) -> i1
-    %16 = comb.extract %b from 1 : (i4) -> i1
-    %17 = comb.add %15, %16 : i1
-    %18 = comb.extract %a from 0 : (i4) -> i1
-    %19 = comb.extract %b from 0 : (i4) -> i1
-    %20 = comb.add %18, %19 : i1
-    hw.output %8 : i4
   }
   hw.module @CustomLogic(in %a : i8, in %b : i8, out out : i8) {
     %c-1_i8 = hw.constant -1 : i8
@@ -160,6 +133,20 @@ module {
     %11 = comb.concat %2, %5, %8, %10 : i1, i1, i1, i1
     hw.output %11 : i4
   }
+  hw.module @ShiftAndXOR(in %a : i4, in %b : i4, out out : i4) {
+    %0 = comb.extract %a from 3 : (i4) -> i1
+    %1 = comb.extract %b from 2 : (i4) -> i1
+    %2 = comb.xor %0, %1 : i1
+    %3 = comb.extract %a from 2 : (i4) -> i1
+    %4 = comb.extract %b from 1 : (i4) -> i1
+    %5 = comb.xor %3, %4 : i1
+    %6 = comb.extract %a from 1 : (i4) -> i1
+    %7 = comb.extract %b from 0 : (i4) -> i1
+    %8 = comb.xor %6, %7 : i1
+    %9 = comb.extract %a from 0 : (i4) -> i1
+    %10 = comb.concat %2, %5, %8, %9 : i1, i1, i1, i1
+    hw.output %10 : i4
+  }
   hw.module @CarryChainAdder(in %a : i4, in %b : i4, out sum : i4) {
     %c0_i2 = hw.constant 0 : i2
     %false = hw.constant false
@@ -196,19 +183,32 @@ module {
     %30 = comb.concat %29, %21, %13, %8 : i1, i1, i1, i1
     hw.output %30 : i4
   }
-  hw.module @ShiftAndXOR(in %a : i4, in %b : i4, out out : i4) {
-    %0 = comb.extract %a from 3 : (i4) -> i1
-    %1 = comb.extract %b from 2 : (i4) -> i1
-    %2 = comb.xor %0, %1 : i1
-    %3 = comb.extract %a from 2 : (i4) -> i1
-    %4 = comb.extract %b from 1 : (i4) -> i1
-    %5 = comb.xor %3, %4 : i1
-    %6 = comb.extract %a from 1 : (i4) -> i1
-    %7 = comb.extract %b from 0 : (i4) -> i1
-    %8 = comb.xor %6, %7 : i1
-    %9 = comb.extract %a from 0 : (i4) -> i1
-    %10 = comb.concat %2, %5, %8, %9 : i1, i1, i1, i1
-    hw.output %10 : i4
+  hw.module @test_add(in %a : i4, in %b : i4, out o : i4) {
+    %c0_i2 = hw.constant 0 : i2
+    %false = hw.constant false
+    %c0_i3 = hw.constant 0 : i3
+    %0 = comb.concat %17, %false : i1, i1
+    %1 = comb.concat %false, %20 : i1, i1
+    %2 = comb.or %0, %1 : i2
+    %3 = comb.concat %14, %c0_i2 : i1, i2
+    %4 = comb.concat %false, %2 : i1, i2
+    %5 = comb.or %3, %4 : i3
+    %6 = comb.concat %false, %5 : i1, i3
+    %7 = comb.concat %11, %c0_i3 : i1, i3
+    %8 = comb.or %7, %6 : i4
+    %9 = comb.extract %a from 3 : (i4) -> i1
+    %10 = comb.extract %b from 3 : (i4) -> i1
+    %11 = comb.add %9, %10 : i1
+    %12 = comb.extract %a from 2 : (i4) -> i1
+    %13 = comb.extract %b from 2 : (i4) -> i1
+    %14 = comb.add %12, %13 : i1
+    %15 = comb.extract %a from 1 : (i4) -> i1
+    %16 = comb.extract %b from 1 : (i4) -> i1
+    %17 = comb.add %15, %16 : i1
+    %18 = comb.extract %a from 0 : (i4) -> i1
+    %19 = comb.extract %b from 0 : (i4) -> i1
+    %20 = comb.add %18, %19 : i1
+    hw.output %8 : i4
   }
   hw.module @VectorizedSubtraction(in %a : i8, in %b : i8, out o : i8) {
     %c0_i4 = hw.constant 0 : i4
@@ -264,6 +264,22 @@ module {
     %43 = comb.extract %b from 0 : (i8) -> i1
     %44 = comb.sub %42, %43 : i1
     hw.output %20 : i8
+  }
+  hw.module @raw_example(in %in : i4, out out : i4) {
+    %0 = comb.extract %in from 2 : (i4) -> i1
+    %1 = comb.and %2, %0 : i1
+    %2 = comb.extract %in from 3 : (i4) -> i1
+    %3 = comb.extract %in from 0 : (i4) -> i2
+    %4 = comb.concat %2, %1, %3 : i1, i1, i2
+    hw.output %4 : i4
+  }
+  hw.module @cross_dependency(in %in : i2, out out : i2) {
+    %0 = comb.extract %in from 0 : (i2) -> i1
+    %1 = comb.xor %0, %3 : i1
+    %2 = comb.extract %in from 1 : (i2) -> i1
+    %3 = comb.xor %2, %1 : i1
+    %4 = comb.concat %3, %1 : i1, i1
+    hw.output %4 : i2
   }
 }
 

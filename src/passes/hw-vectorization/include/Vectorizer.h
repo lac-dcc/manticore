@@ -39,6 +39,12 @@ public:
   bool isValidPermutation(const std::vector<unsigned> &perm, unsigned bitWidth);
   bool can_apply_partial_vectorization(Value oldOutputVal);
 
+  bool hasCrossBitDependencies(mlir::Value outputVal);
+  void collectLogicCone(mlir::Value val, llvm::DenseSet<mlir::Value> &cone);
+  bool isSafeSharedValue(mlir::Value val,
+                                   llvm::SmallPtrSetImpl<mlir::Value> &visited);
+  bool isSafeSharedValue(mlir::Value val);
+
   void process_extract_ops();
   void process_concat_ops();
 

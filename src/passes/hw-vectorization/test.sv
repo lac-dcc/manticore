@@ -1,3 +1,4 @@
+// Linear and reverse
 module simple_vectorization(output wire [3:0] out, input wire [3:0] in);
     assign out[3] = in[3];
     assign out[2] = in[2];
@@ -10,22 +11,6 @@ module reverse_endianess_vectorization(output wire [3:0] out, input wire [3:0] i
     assign out[2] = in[1];
     assign out[1] = in[2];
     assign out[0] = in[3];
-endmodule
-
-module bit_mixing_vectorization(output wire [3:0] out2, output wire [7:0] out, input wire [3:0] in2,  input wire [7:0] in);
-    assign out2[3] = in2[0];
-    assign out2[1] = in2[2];
-    assign out2[2] = in2[3];
-    assign out2[0] = in2[1];
-
-    assign out[7] = in[7];
-    assign out[6] = in[6];
-    assign out[5] = in[4];
-    assign out[4] = in[5];
-    assign out[3] = in[0];
-    assign out[2] = in[3];
-    assign out[1] = in[2];
-    assign out[0] = in[1];
 endmodule
 
 module linear_and_reverse(output wire [7:0] out, output wire [3:0] out2, input wire [7:0] in, input wire [3:0] in2);
@@ -44,6 +29,25 @@ module linear_and_reverse(output wire [7:0] out, output wire [3:0] out2, input w
     assign out2[0] = in2[3];
 endmodule
 
+// Bit shuffles
+module bit_mixing_vectorization(output wire [3:0] out2, output wire [7:0] out, input wire [3:0] in2,  input wire [7:0] in);
+    assign out2[3] = in2[0];
+    assign out2[1] = in2[2];
+    assign out2[2] = in2[3];
+    assign out2[0] = in2[1];
+
+    assign out[7] = in[7];
+    assign out[6] = in[6];
+    assign out[5] = in[4];
+    assign out[4] = in[5];
+    assign out[3] = in[0];
+    assign out[2] = in[3];
+    assign out[1] = in[2];
+    assign out[0] = in[1];
+endmodule
+
+// Use of combined logic gates or gates controlled by enable signals,
+//Bitwise mathematical operations in multiple patterns
 module test_mux(output wire [3:0] result, input wire [3:0] a, b, input wire sel);
     assign result[3] = (a[3] & sel) | (b[3] & ~sel);
     assign result[2] = (a[2] & sel) | (b[2] & ~sel);
@@ -74,7 +78,7 @@ module test_multiple_patterns(
   assign out_and[0] = a[0] & c[0];
 endmodule
 
-module test_multiple_patterns2(
+module test_multiple_patterns_reverse(
   output wire [3:0] out_xor,
   input wire [3:0] a, b
 );
@@ -82,13 +86,6 @@ module test_multiple_patterns2(
   assign out_xor[2] = a[2] ^ b[1];
   assign out_xor[1] = a[1] ^ b[2];
   assign out_xor[0] = a[0] ^ b[3];
-endmodule
-
-module test_add(output wire [3:0] o, input wire [3:0] a, b);
-  assign o[3] = a[3] + b[3];
-  assign o[2] = a[2] + b[2];
-  assign o[1] = a[1] + b[1];
-  assign o[0] = a[0] + b[0];
 endmodule
 
 module CustomLogic (
@@ -159,7 +156,6 @@ module ShuffledXOR(
 
 endmodule
 
-
 module LogicalShiftRightBy2(
   output wire [7:0] out,
   input  wire [7:0] in
@@ -211,6 +207,20 @@ module InconsistentLogic(
 
 endmodule
 
+module ShiftAndXOR(
+  output wire [3:0] out,
+  input  wire [3:0] a,
+  input  wire [3:0] b
+);
+
+  assign out[3] = a[3] ^ b[2]; 
+  assign out[2] = a[2] ^ b[1];
+  assign out[1] = a[1] ^ b[0];
+  assign out[0] = a[0] ^ 1'b0; 
+
+endmodule
+
+// must NOT vectorize
 module CarryChainAdder(
   output wire [3:0] sum,
   input  wire [3:0] a,
@@ -232,17 +242,11 @@ module CarryChainAdder(
 
 endmodule
 
-module ShiftAndXOR(
-  output wire [3:0] out,
-  input  wire [3:0] a,
-  input  wire [3:0] b
-);
-
-  assign out[3] = a[3] ^ b[2]; 
-  assign out[2] = a[2] ^ b[1];
-  assign out[1] = a[1] ^ b[0];
-  assign out[0] = a[0] ^ 1'b0; 
-
+module test_add(output wire [3:0] o, input wire [3:0] a, b);
+  assign o[3] = a[3] + b[3];
+  assign o[2] = a[2] + b[2];
+  assign o[1] = a[1] + b[1];
+  assign o[0] = a[0] + b[0];
 endmodule
 
 module VectorizedSubtraction(
@@ -259,4 +263,22 @@ module VectorizedSubtraction(
   assign o[1] = a[1] - b[1];
   assign o[0] = a[0] - b[0];
   
+endmodule
+
+module raw_example(
+    input  [3:0] in,
+    output [3:0] out
+);
+    assign out[3] = in[3];
+    assign out[2] = out[3] & in[2];  
+    assign out[1] = in[1];
+    assign out[0] = in[0];
+endmodule
+
+module cross_dependency(
+    input  [1:0] in,
+    output [1:0] out
+);
+    assign out[0] = in[0] ^ out[1];
+    assign out[1] = in[1] ^ out[0];
 endmodule
