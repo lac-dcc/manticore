@@ -87,9 +87,8 @@ module {
   hw.module @bit_duplicate(in %in : i4, out out : i4) {
     %0 = comb.extract %in from 0 : (i4) -> i1
     %1 = comb.extract %in from 2 : (i4) -> i2
-    %2 = comb.replicate %0 : (i1) -> i2
-    %3 = comb.concat %1, %2 : i2, i2
-    hw.output %3 : i4
+    %2 = comb.concat %1, %0, %0 : i2, i1, i1
+    hw.output %2 : i4
   }
   hw.module @ShuffledXOR(in %a : i4, in %b : i4, out out : i4) {
     %0 = comb.xor %a, %b {sv.namehint = "temp"} : i4
@@ -146,6 +145,15 @@ module {
     %9 = comb.extract %a from 0 : (i4) -> i1
     %10 = comb.concat %2, %5, %8, %9 : i1, i1, i1, i1
     hw.output %10 : i4
+  }
+  hw.module @intermodule_vectorization(in %in : i4, out out : i4) {
+    hw.output %in : i4
+  }
+  hw.module @top_byte_swap(in %i : i8, out o : i8) {
+    %0 = comb.extract %i from 4 : (i8) -> i4
+    %1 = comb.extract %i from 0 : (i8) -> i4
+    %2 = comb.concat %1, %0 : i4, i4
+    hw.output %2 : i8
   }
   hw.module @CarryChainAdder(in %a : i4, in %b : i4, out sum : i4) {
     %c0_i2 = hw.constant 0 : i2

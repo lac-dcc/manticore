@@ -3,6 +3,12 @@
 
 #include "mlir/IR/OpDefinition.h"
 #include "llvm/ADT/SmallVector.h"
+#include "mlir/Transforms/InliningUtils.h" 
+#include "mlir/Interfaces/CallInterfaces.h" 
+#include "mlir/IR/IRMapping.h"
+#include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/MapVector.h"
+#include <fstream>
 #include <algorithm>
 #include <vector>
 
@@ -74,6 +80,165 @@ void vectorizer::vectorize() {
     if (changed) {
         cleanup_dead_ops(block);
     }
+}
+
+void vectorizer::performInlining() {
+    buildCallGraph();
+    llvm::DenseMap<mlir::Operation*, std::string> instancePaths;
+    std::vector<hw::InstanceOp> candidates;
+    findInliningCandidates(instancePaths, candidates);
+
+    if (candidates.empty()) {
+        return;
+    }
+
+    mlir::OpBuilder builder(module.getContext());
+
+    for (auto instOp : llvm::reverse(candidates)) {
+        auto *calleeOp = module->getParentOfType<mlir::ModuleOp>().lookupSymbol(instOp.getModuleName());
+        auto calleeModule = cast<hw::HWModuleOp>(calleeOp);
+
+
+        mlir::IRMapping mapper;
+
+        Block &calleeEntryBlock = calleeModule.getBody().front();
+        for (auto const &indexedOperand : llvm::enumerate(instOp.getOperands())) {
+            mapper.map(calleeEntryBlock.getArgument(indexedOperand.index()), indexedOperand.value());
+        }
+
+        builder.setInsertionPoint(instOp);
+
+        for (Operation &op : calleeEntryBlock.getOperations()) {
+            if (!isa<hw::OutputOp>(op)) {
+                builder.clone(op, mapper);
+            }
+        }
+
+        auto outputOp = cast<hw::OutputOp>(calleeEntryBlock.getTerminator());
+        for (auto const &indexedResult : llvm::enumerate(instOp.getResults())) {
+            indexedResult.value().replaceAllUsesWith(mapper.lookup(outputOp.getOperand(indexedResult.index())));
+        }
+
+        instOp.erase();
+    }
+}
+
+void vectorizer::findInliningCandidates(
+    llvm::DenseMap<mlir::Operation*, std::string>& instancePaths,
+    std::vector<hw::InstanceOp>& candidates
+) {
+    llvm::MapVector<mlir::Operation*, llvm::SmallVector<hw::InstanceOp, 4>> instancesByCallee;
+
+    module.walk([&](hw::InstanceOp instOp) {
+        instancePaths[instOp.getOperation()] = instOp.getInstanceName().str();
+    });
+
+    mlir::ModuleOp topModule = module->getParentOfType<mlir::ModuleOp>();
+
+    module.walk([&](hw::InstanceOp instOp) {
+
+        if (auto *callee = topModule.lookupSymbol(instOp.getModuleName())) {
+            instancesByCallee[callee].push_back(instOp);
+        }
+    });
+
+    for (auto const& [callee, instances] : instancesByCallee) {
+        auto hwMod = cast<hw::HWModuleOp>(callee);
+        
+        if (!shouldInline(hwMod)) {
+            continue; 
+        }
+
+        for (auto inst : instances) {
+            candidates.push_back(inst);
+        }
+    }
+}
+
+bool vectorizer::shouldInline(hw::HWModuleOp callee) {
+    llvm::SmallPtrSet<mlir::Operation*, 16> visited;
+    if (isRecursive(callee, visited)) {
+        return false;
+    }
+
+    const int CONSERVATIVE_THRESHOLD = 30;
+    const int GENEROUS_THRESHOLD = 150;
+    int recursiveSize = getRecursiveSize(callee);
+
+    if (isHighlyRegular(callee)) {
+        if (recursiveSize > GENEROUS_THRESHOLD) return false;
+    } else {
+        if (recursiveSize > CONSERVATIVE_THRESHOLD) return false;
+    }
+
+    return true; 
+}
+
+int vectorizer::getRecursiveSize(hw::HWModuleOp module) {
+    if (sizeCache.count(module)) return sizeCache[module];
+    int currentSize = 0;
+    mlir::ModuleOp topModule = module->getParentOfType<mlir::ModuleOp>();
+
+    for(auto &op : module.getBodyBlock()->getOperations()){
+        if (auto instOp = dyn_cast<hw::InstanceOp>(op)) {
+            auto *callee = topModule.lookupSymbol(instOp.getModuleName());
+            if (callee && isa<hw::HWModuleOp>(callee)) 
+                currentSize += getRecursiveSize(cast<hw::HWModuleOp>(callee));
+        } else if (!isa<hw::OutputOp>(op)) {
+            currentSize++;
+        }
+    }
+    return sizeCache[module] = currentSize;
+}
+
+bool vectorizer::isHighlyRegular(hw::HWModuleOp module) {
+    if (regularityCache.count(module)) return regularityCache[module];
+    bool isRegular = true;
+    mlir::ModuleOp topModule = module->getParentOfType<mlir::ModuleOp>();
+
+    for(auto &op : module.getBodyBlock()->getOperations()){
+        if (auto instOp = dyn_cast<hw::InstanceOp>(op)) {
+            auto *callee = topModule.lookupSymbol(instOp.getModuleName());
+            if (callee && isa<hw::HWModuleOp>(callee) && !isHighlyRegular(cast<hw::HWModuleOp>(callee))) {
+                isRegular = false;
+                break;
+            }
+        } else if (!isa<hw::ConstantOp, hw::OutputOp, comb::ExtractOp, 
+                         comb::ConcatOp, comb::AndOp, comb::OrOp, comb::XorOp>(op)) {
+            isRegular = false;
+            break;
+        }
+    }
+    return regularityCache[module] = isRegular;
+}
+
+void vectorizer::buildCallGraph() {
+    callGraph.clear();
+    mlir::ModuleOp topLevelModule = module->getParentOfType<mlir::ModuleOp>(); 
+
+    topLevelModule->walk([&](hw::HWModuleOp moduleOp) {
+        moduleOp.walk([&](hw::InstanceOp instOp) {
+            auto *callee = topLevelModule.lookupSymbol(instOp.getModuleName());
+            if (callee) {
+                callGraph[moduleOp.getOperation()].push_back(callee);
+            }
+        });
+    });
+}
+
+bool vectorizer::isRecursive(mlir::Operation* startNode, llvm::SmallPtrSet<mlir::Operation*, 16> &visited) {
+    if (!visited.insert(startNode).second) {
+        return true;
+    }
+    if (callGraph.count(startNode)) {
+        for (auto *callee : callGraph[startNode]) {
+            if (isRecursive(callee, visited)) {
+                return true;
+            }
+        }
+    }
+    visited.erase(startNode);
+    return false;
 }
 
 void vectorizer::process_logical_ops() {

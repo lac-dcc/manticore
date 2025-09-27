@@ -18,11 +18,10 @@ CXXFLAGS    += -fPIC -shared -std=c++17 -O2 -fvisibility=default \
 LDFLAGS     += `$(LLVM_CONFIG) --ldflags --libs core Support` \
                -Wl,-rpath,$(LLVM_PREFIX)/lib -L$(LLVM_PREFIX)/lib \
                -L$(CIRCT_PREFIX)/build/lib \
-               -lMLIRIR -lMLIRPass -lMLIRSupport -lMLIRParser -lMLIRTransforms \
+               -lMLIRIR -lMLIRPass -lMLIRAnalysis -lMLIRSupport -lMLIRParser -lMLIRTransforms \
                -lCIRCTComb -lCIRCTMoore -lCIRCTSV -lCIRCTHW
 
 SOURCES = lib/VectorizePass.cpp \
-          lib/StructuralPatternVectorization.cpp \
           lib/Vectorizer.cpp \
           lib/BitArray.cpp
 

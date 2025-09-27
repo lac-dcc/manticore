@@ -9,6 +9,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "llvm/ADT/SmallVector.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 #include <llvm/ADT/DenseMap.h>
 #include <llvm/Support/Casting.h>
@@ -28,6 +29,10 @@ public:
 
   hw::HWModuleOp module;
   llvm::DenseMap<mlir::Value, bit_array> bit_arrays;
+  llvm::DenseMap<mlir::Operation*, llvm::SmallVector<mlir::Operation*, 4>> callGraph;
+
+  std::map<mlir::Operation*, int> sizeCache;
+  std::map<mlir::Operation*, bool> regularityCache;
 
   mlir::Value findBitSource(mlir::Value vectorVal, unsigned bitIndex);
   mlir::Value vectorizeSubgraph(OpBuilder &builder, mlir::Value slice0Val, unsigned vectorWidth,
@@ -62,6 +67,15 @@ public:
 
   void clean_hw_module(Block& body, OpBuilder& op_builder, Location& loc);
   void cleanup_dead_ops(Block& body);
+  
+  void performInlining();
+  int getRecursiveSize(circt::hw::HWModuleOp module);
+  bool isHighlyRegular(circt::hw::HWModuleOp module);
+  void findInliningCandidates(llvm::DenseMap<mlir::Operation*, std::string>& instancePaths,
+                                std::vector<circt::hw::InstanceOp>& candidates);
+  bool shouldInline(circt::hw::HWModuleOp callee);
+  void buildCallGraph();
+  bool isRecursive(mlir::Operation* startNode, llvm::SmallPtrSet<mlir::Operation*, 16> &visited);
 };
 
 

@@ -620,6 +620,86 @@ module {
     %18 = comb.extract %a from 0 : (i4) -> i1
     hw.output %8 : i4
   }
+  hw.module @intermodule_vectorization(in %in : i4, out out : i4) {
+    %c0_i2 = hw.constant 0 : i2
+    %false = hw.constant false
+    %c7_i4 = hw.constant 7 : i4
+    %c-5_i4 = hw.constant -5 : i4
+    %c0_i3 = hw.constant 0 : i3
+    %0 = comb.concat %c0_i3, %buf_inst0.o : i3, i1
+    %1 = comb.concat %c0_i2, %buf_inst1.o, %false : i2, i1, i1
+    %2 = comb.or %1, %0 : i4
+    %3 = comb.and %2, %c-5_i4 : i4
+    %4 = comb.concat %false, %buf_inst2.o, %c0_i2 : i1, i1, i2
+    %5 = comb.or %4, %3 : i4
+    %6 = comb.and %5, %c7_i4 : i4
+    %7 = comb.concat %buf_inst3.o, %c0_i3 : i1, i3
+    %8 = comb.or %7, %6 : i4
+    %9 = comb.extract %in from 3 : (i4) -> i1
+    %buf_inst3.o = hw.instance "buf_inst3" @mybuf(i: %9: i1) -> (o: i1)
+    %10 = comb.extract %in from 2 : (i4) -> i1
+    %buf_inst2.o = hw.instance "buf_inst2" @mybuf(i: %10: i1) -> (o: i1)
+    %11 = comb.extract %in from 1 : (i4) -> i1
+    %buf_inst1.o = hw.instance "buf_inst1" @mybuf(i: %11: i1) -> (o: i1)
+    %12 = comb.extract %in from 0 : (i4) -> i1
+    %buf_inst0.o = hw.instance "buf_inst0" @mybuf(i: %12: i1) -> (o: i1)
+    hw.output %8 : i4
+  }
+  hw.module private @mybuf(in %i : i1, out o : i1) {
+    hw.output %i : i1
+  }
+  hw.module private @bit_swapper(in %i0 : i1, in %i1 : i1, out o0 : i1, out o1 : i1) {
+    hw.output %i1, %i0 : i1, i1
+  }
+  hw.module @top_byte_swap(in %i : i8, out o : i8) {
+    %c0_i4 = hw.constant 0 : i4
+    %c0_i3 = hw.constant 0 : i3
+    %c0_i5 = hw.constant 0 : i5
+    %c0_i2 = hw.constant 0 : i2
+    %c0_i6 = hw.constant 0 : i6
+    %false = hw.constant false
+    %c127_i8 = hw.constant 127 : i8
+    %c-65_i8 = hw.constant -65 : i8
+    %c-33_i8 = hw.constant -33 : i8
+    %c-17_i8 = hw.constant -17 : i8
+    %c-9_i8 = hw.constant -9 : i8
+    %c-5_i8 = hw.constant -5 : i8
+    %c0_i7 = hw.constant 0 : i7
+    %0 = comb.concat %c0_i7, %s0.o0 : i7, i1
+    %1 = comb.concat %c0_i6, %s1.o0, %false : i6, i1, i1
+    %2 = comb.or %1, %0 : i8
+    %3 = comb.and %2, %c-5_i8 : i8
+    %4 = comb.concat %c0_i5, %s2.o0, %c0_i2 : i5, i1, i2
+    %5 = comb.or %4, %3 : i8
+    %6 = comb.and %5, %c-9_i8 : i8
+    %7 = comb.concat %c0_i4, %s3.o0, %c0_i3 : i4, i1, i3
+    %8 = comb.or %7, %6 : i8
+    %9 = comb.and %8, %c-17_i8 : i8
+    %10 = comb.concat %c0_i3, %s0.o1, %c0_i4 : i3, i1, i4
+    %11 = comb.or %10, %9 : i8
+    %12 = comb.and %11, %c-33_i8 : i8
+    %13 = comb.concat %c0_i2, %s1.o1, %c0_i5 : i2, i1, i5
+    %14 = comb.or %13, %12 : i8
+    %15 = comb.and %14, %c-65_i8 : i8
+    %16 = comb.concat %false, %s2.o1, %c0_i6 : i1, i1, i6
+    %17 = comb.or %16, %15 : i8
+    %18 = comb.and %17, %c127_i8 : i8
+    %19 = comb.concat %s3.o1, %c0_i7 : i1, i7
+    %20 = comb.or %19, %18 : i8
+    %21 = comb.extract %i from 0 : (i8) -> i1
+    %22 = comb.extract %i from 4 : (i8) -> i1
+    %s0.o0, %s0.o1 = hw.instance "s0" @bit_swapper(i0: %21: i1, i1: %22: i1) -> (o0: i1, o1: i1)
+    %23 = comb.extract %i from 1 : (i8) -> i1
+    %24 = comb.extract %i from 5 : (i8) -> i1
+    %s1.o0, %s1.o1 = hw.instance "s1" @bit_swapper(i0: %23: i1, i1: %24: i1) -> (o0: i1, o1: i1)
+    %25 = comb.extract %i from 2 : (i8) -> i1
+    %26 = comb.extract %i from 6 : (i8) -> i1
+    %s2.o0, %s2.o1 = hw.instance "s2" @bit_swapper(i0: %25: i1, i1: %26: i1) -> (o0: i1, o1: i1)
+    %27 = comb.extract %i from 3 : (i8) -> i1
+    %28 = comb.extract %i from 7 : (i8) -> i1
+    %s3.o0, %s3.o1 = hw.instance "s3" @bit_swapper(i0: %27: i1, i1: %28: i1) -> (o0: i1, o1: i1)
+    hw.output %20 : i8
+  }
   hw.module @CarryChainAdder(in %a : i4, in %b : i4, out sum : i4) {
     %c0_i2 = hw.constant 0 : i2
     %false = hw.constant false

@@ -2,6 +2,7 @@
 jgproject
 src/passes/Vectorization/Makefile
 /src/passes/hw-vectorization/build/
+src/chimera_testing/
 scripts
 .venv
 *.so

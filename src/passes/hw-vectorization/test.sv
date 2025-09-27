@@ -220,6 +220,38 @@ module ShiftAndXOR(
 
 endmodule
 
+//inline - intermodule_vectorization
+module intermodule_vectorization(
+  output wire [3:0] out,
+  input  wire [3:0] in
+);
+
+  mybuf buf_inst3(out[3], in[3]);
+  mybuf buf_inst2(out[2], in[2]);
+  mybuf buf_inst1(out[1], in[1]);
+  mybuf buf_inst0(out[0], in[0]);
+
+endmodule
+
+module mybuf(
+  output wire o,
+  input  wire i
+);
+  assign o = i;
+endmodule
+
+module bit_swapper(output wire o0, output wire o1, input wire i0, input wire i1);
+  assign o0 = i1;
+  assign o1 = i0;
+endmodule
+
+module top_byte_swap(output wire [7:0] o, input wire [7:0] i);
+  bit_swapper s0 (.o0(o[0]), .o1(o[4]), .i0(i[0]), .i1(i[4]));
+  bit_swapper s1 (.o0(o[1]), .o1(o[5]), .i0(i[1]), .i1(i[5]));
+  bit_swapper s2 (.o0(o[2]), .o1(o[6]), .i0(i[2]), .i1(i[6]));
+  bit_swapper s3 (.o0(o[3]), .o1(o[7]), .i0(i[3]), .i1(i[7]));
+endmodule
+
 // must NOT vectorize
 module CarryChainAdder(
   output wire [3:0] sum,
