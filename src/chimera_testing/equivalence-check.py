@@ -27,16 +27,21 @@ class EquivalenceChecker:
 
         return output[0] == "True"
 
-    def check_equivalence():
+    def check_equivalence(self):
         design_list = [f for f in os.listdir("../../designs/real-vectorized") 
                 if os.path.isfile(os.path.join("../../designs/real-vectorized/", f))]
 
         for design in tqdm(design_list, desc="Teste de Equivalencia"):
-            row = [design, vectorized_and_non_vectorized_equivalent(design)]
+            row = [design, self.vectorized_and_non_vectorized_equivalent(design)]
             self.result_df.loc[len(self.result_df)] = row
 
         self.result_df.to_csv("equivalence.csv", index=True)
 
+        subprocess.run(['bash', 'rm *.tcl'], stdout=subprocess.PIPE, text=True)
+
+
+e = EquivalenceChecker()
+e.check_equivalence()
 
 
 

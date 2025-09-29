@@ -1,37 +1,57 @@
 #!/bin/bash
 
-# Base file name (without extension)
+function run_vectorization {
+  file=$1
+  output_dir_path=$2
+  file_base_name=$(basename $1)
 
-file=$1
-file_base_name=$(basename $file)
+  circt-verilog --ir-hw $file -o design.hw.mlir
 
-# echo "Converting Verilog to IR Moore..."
-circt-verilog --ir-hw $file -o ${file_base_name}.hw.mlir
-
-# echo "Running vectorization pass..."
-circt-opt ${file_base_name}.hw.mlir \
-  --pass-pipeline="builtin.module(simple-vec)" \
-  --load-pass-plugin=./../passes/hw-vectorization/build/VectorizePass.so \
-  -o ${file_base_name}.after_pass.mlir
+  circt-opt design.hw.mlir \
+    --pass-pipeline="builtin.module(simple-vec)" \
+    --load-pass-plugin=./../passes/hw-vectorization/build/VectorizePass.so \
+    -o design.after_pass.mlir
 
 
-# echo "Cleaning and optimizing IR..."
-circt-opt \
-  --llhd-desequentialize \
-  --llhd-hoist-signals \
-  --llhd-sig2reg \
-  --llhd-mem2reg \
-  --llhd-process-lowering \
-  --cse \
-  --canonicalize \
-  --hw-cleanup    \
-  ${file_base_name}.after_pass.mlir -o ${file_base_name}.cleaned.mlir
+  circt-opt \
+    --llhd-desequentialize \
+    --llhd-hoist-signals \
+    --llhd-sig2reg \
+    --llhd-mem2reg \
+    --llhd-process-lowering \
+    --cse \
+    --canonicalize \
+    --hw-cleanup    \
+    design.after_pass.mlir -o design.cleaned.mlir
 
-# Step 5: Generate final Verilog
-# echo "Generating final Verilog..."
 
-firtool ${file_base_name}.cleaned.mlir --verilog -o $file
+  if [[ ! -z "${output_dir_path-}" ]]; then
+    cp $file "$output_dir_path/non-vectorized"
+    firtool design.cleaned.mlir --verilog -o "$output_dir_path/vectorized/$file_base_name"
+  fi
 
-# echo "Pipeline completed! Verilog generated in ${BASE_NAME}_final.v"
+}
 
-rm *.mlir
+function vectorize_design_collection {
+  design_collection_path=$1
+  output_dir_path=$2
+
+  mkdir "$output_dir_path/non-vectorized"
+  mkdir "$output_dir_path/vectorized"
+  
+  touch artificial-vectorization.csv
+  echo ",design,pass-execution-time" > artificial-vectorization.csv
+
+  shopt -s nullglob
+  for design in $design_collection_path/*.sv $design_collection_path/*.v; do
+    start=$(date +%s%3N)                   # epoch em ms
+    run_vectorization "$design" "$output_dir_path"
+    end=$(date +%s%3N)
+    vec_time_ms=$(( end - start ))
+
+    echo "$(basename $design),$vec_time_ms"
+    echo "$(basename $design),$vec_time_ms" >> artificial-vectorization.csv
+  done
+}
+
+vectorize_design_collection $1 $2

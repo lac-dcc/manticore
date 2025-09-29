@@ -7,17 +7,17 @@ TCL_FILE_NON_VECTORIZED = "non-vectorized.tcl"
 
 class DesignBenchmarker:
 
-    def __init__(self, design, sample_size):
+    def __init__(self, design, sample_size, source_dir):
         self.design = design
         self.sample_size = sample_size
+        self.source_dir = source_dir
         
         with open("tcl-scripts-jg/jg-analyzis.tcl", encoding="utf-8") as f:
             tcl_template = f.read()
 
-        self.designs_directory_path = "../../designs/"
 
-        tcl_vectorized = tcl_template.replace("file.v", f"{self.designs_directory_path}/real-vectorized/{self.design}")
-        tcl_non_vectorized = tcl_template.replace("file.v", f"{self.designs_directory_path}/non-vectorized/{self.design}")
+        tcl_vectorized = tcl_template.replace("file.v", f"{self.source_dir}/vectorized/{self.design}")
+        tcl_non_vectorized = tcl_template.replace("file.v", f"{self.source_dir}/non-vectorized/{self.design}")
         
         with open(TCL_FILE_VECTORIZED, "w", encoding="utf-8") as out1:
             out1.write(tcl_vectorized)

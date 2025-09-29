@@ -17,7 +17,7 @@ proc get_mem_kb {} {
 
 # analyze
 set before [get_mem_kb]
-set analyze_us [lindex [time {analyze -sv ../../designs//non-vectorized/11111_OpenABC_leaf_level_verilog_gf12_bp_quad_bsg_concentrate_static_1b.v } 1] 0]
+set analyze_us [lindex [time {analyze -sv ['12-design.sv', '10-design.sv', '1-design.sv', '4-design.sv', '2-design.sv', '3-design.sv', '7-design.sv', '13-design.sv', '8-design.sv', '5-design.sv', '14-design.sv', '6-design.sv', '9-design.sv', '11-design.sv']/non-vectorized/12-design.sv } 1] 0]
 print_time "TIME_ANALYZE" $analyze_us
 
 # elaborate
