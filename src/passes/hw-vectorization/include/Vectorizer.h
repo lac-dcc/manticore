@@ -2,6 +2,7 @@
 #define VECTORIZER_H
 
 #include "../include/BitArray.h"
+#include "../include/VectorizationUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -34,7 +35,7 @@ public:
   std::map<mlir::Operation*, int> sizeCache;
   std::map<mlir::Operation*, bool> regularityCache;
 
-  mlir::Value findBitSource(mlir::Value vectorVal, unsigned bitIndex);
+  mlir::Value findBitSource(mlir::Value vectorVal, unsigned bitIndex, int depth = 0);
   mlir::Value vectorizeSubgraph(OpBuilder &builder, mlir::Value slice0Val, unsigned vectorWidth,
                                           llvm::DenseMap<mlir::Value, mlir::Value> &vectorizedMap);
 
@@ -57,7 +58,7 @@ public:
   void process_and_op(comb::AndOp op);
   void process_logical_ops();
 
-  void vectorize();
+  void vectorize(VectorizationStatistics &stats);
 
   void apply_linear_vectorization(mlir::Value oldOutputVal, mlir::Value sourceInput);
   void apply_reverse_vectorization(mlir::OpBuilder &builder, mlir::Value oldOutputVal, mlir::Value sourceInput);
@@ -68,7 +69,7 @@ public:
   void clean_hw_module(Block& body, OpBuilder& op_builder, Location& loc);
   void cleanup_dead_ops(Block& body);
   
-  void performInlining();
+  void performInlining(VectorizationStatistics &stats);
   int getRecursiveSize(circt::hw::HWModuleOp module);
   bool isHighlyRegular(circt::hw::HWModuleOp module);
   void findInliningCandidates(llvm::DenseMap<mlir::Operation*, std::string>& instancePaths,

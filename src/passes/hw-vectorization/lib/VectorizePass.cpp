@@ -4,14 +4,13 @@
 #include "mlir/Tools/Plugins/PassPlugin.h"
 #include "llvm/Config/llvm-config.h"
 
-#include "VectorizationUtils.h"
-
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 
 #include "../include/Vectorizer.h"
+#include "../include/VectorizationUtils.h"
 
 namespace {
 
@@ -41,10 +40,11 @@ struct VectorizationPass
 
         for (auto module : hw_modules) {
             vectorizer v(module);
-            v.performInlining();
-            v.vectorize();
+            v.performInlining(stats);
+            v.vectorize(stats);
 
         }
+        stats.printReport();
     }
 
     mlir::StringRef getArgument() const override { return "hw-vectorization"; }

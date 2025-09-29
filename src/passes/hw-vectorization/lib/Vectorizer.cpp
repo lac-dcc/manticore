@@ -1,5 +1,6 @@
 #include "../include/Vectorizer.h"
 #include "../include/BitArray.h"
+#include "../include/VectorizationUtils.h"
 
 #include "mlir/IR/OpDefinition.h"
 #include "llvm/ADT/SmallVector.h"
@@ -14,7 +15,7 @@
 
 vectorizer::vectorizer(hw::HWModuleOp module): module(module) {}
 
-void vectorizer::vectorize() {
+void vectorizer::vectorize(VectorizationStatistics &stats) {
     process_extract_ops();
     process_concat_ops();
     process_logical_ops();
@@ -43,16 +44,20 @@ void vectorizer::vectorize() {
                     if (isValidPermutation(currentPermutationMap, bitWidth)) {
                         if (arr.is_linear(bitWidth, sourceInput)) {
                             apply_linear_vectorization(oldOutputVal, sourceInput);
+                            stats.increment("LINEAR");
                             transformed = true;
                         } else if (arr.is_reverse_and_linear(bitWidth, sourceInput)) {
                             apply_reverse_vectorization(builder, oldOutputVal, sourceInput);
+                            stats.increment("REVERSE");
                             transformed = true;
                         } else {
                             apply_mix_vectorization(builder, oldOutputVal, sourceInput, currentPermutationMap);
+                            stats.increment("MIX");
                             transformed = true;
                         }
                     } else {
                         apply_mix_vectorization(builder, oldOutputVal, sourceInput, currentPermutationMap);
+                        stats.increment("MIX");
                         transformed = true;
                     }
                 }
@@ -65,12 +70,14 @@ void vectorizer::vectorize() {
             } 
             else if (can_vectorize_structurally(oldOutputVal)) {
                 apply_structural_vectorization(builder, oldOutputVal);
+                stats.increment("STRUCTURAL");
                 transformed = true;
             }
         }
 
         if (!transformed && can_apply_partial_vectorization(oldOutputVal)) {
             apply_partial_vectorization(builder, oldOutputVal);
+            stats.increment("PARTIAL");
             transformed = true;
         }
 
@@ -82,11 +89,13 @@ void vectorizer::vectorize() {
     }
 }
 
-void vectorizer::performInlining() {
+void vectorizer::performInlining(VectorizationStatistics &stats) {
     buildCallGraph();
     llvm::DenseMap<mlir::Operation*, std::string> instancePaths;
     std::vector<hw::InstanceOp> candidates;
     findInliningCandidates(instancePaths, candidates);
+
+    stats.increment("INLINE", candidates.size());
 
     if (candidates.empty()) {
         return;
@@ -288,10 +297,8 @@ void vectorizer::process_extract_ops() {
     mlir::Value input = op.getInput();
     mlir::Value result = op.getResult();
     int index = op.getLowBit();
-
     llvm::DenseMap<int,bit> bit_dense_map;
     bit_dense_map.insert({0, bit(input, index)});
-
     bit_array bits(bit_dense_map);
     bit_arrays.insert({result, bits});
   });
@@ -622,9 +629,20 @@ mlir::Value vectorizer::vectorizeSubgraph(OpBuilder &builder, mlir::Value slice0
     return vectorizedResult;
 }
 
-mlir::Value vectorizer::findBitSource(mlir::Value vectorVal, unsigned bitIndex) {
+mlir::Value vectorizer::findBitSource(mlir::Value vectorVal, unsigned bitIndex, int depth) {
+    auto indent = [depth]() { return std::string(depth * 2, ' '); };
+
+    if (auto blockArg = dyn_cast<BlockArgument>(vectorVal)) {
+        if (blockArg.getType().isInteger(1)) {
+            return blockArg;
+        }
+        return nullptr;
+    }
+
     Operation *op = vectorVal.getDefiningOp();
-    if (!op) return nullptr;
+    if (!op) {
+        return nullptr;
+    }
 
     if (op->getNumResults() == 1 && op->getResult(0).getType().isInteger(1)) {
         return op->getResult(0);
@@ -636,35 +654,37 @@ mlir::Value vectorizer::findBitSource(mlir::Value vectorVal, unsigned bitIndex) 
             unsigned operandWidth = cast<IntegerType>(operand.getType()).getWidth();
             currentBit -= operandWidth;
             if (bitIndex >= currentBit && bitIndex < currentBit + operandWidth) {
-                return findBitSource(operand, bitIndex - currentBit);
+                return findBitSource(operand, bitIndex - currentBit, depth + 1);
             }
         }
-    } 
-    else if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
+    } else if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
         OpBuilder builder(op->getContext());
         builder.setInsertionPoint(op); 
         APInt value = constOp.getValue();
         uint64_t bitValue = (bitIndex < value.getBitWidth()) ? value.getZExtValue() >> bitIndex & 1 : 0;
         IntegerAttr constAttr = builder.getIntegerAttr(builder.getI1Type(), bitValue);
-        return builder.create<hw::ConstantOp>(constOp.getLoc(), constAttr);
-    }
-    else if (auto orOp = dyn_cast<comb::OrOp>(op)) {
-        if (auto source = findBitSource(orOp.getInputs()[1], bitIndex)) {
-             if (!mlir::isa<hw::ConstantOp>(source.getDefiningOp()) || 
-                 !cast<hw::ConstantOp>(source.getDefiningOp()).getValue().isZero())
+        Value newConst = builder.create<hw::ConstantOp>(constOp.getLoc(), constAttr);
+        return newConst;
+    } else if (auto orOp = dyn_cast<comb::OrOp>(op)) {
+        
+        if (auto source = findBitSource(orOp.getInputs()[1], bitIndex, depth + 1)) {
+             if (auto sourceConst = dyn_cast_or_null<hw::ConstantOp>(source.getDefiningOp())) {
+                if (!sourceConst.getValue().isZero()) return source;
+             } else {
                 return source;
+             }
         }
-        return findBitSource(orOp.getInputs()[0], bitIndex);
+
+        return findBitSource(orOp.getInputs()[0], bitIndex, depth + 1);
+    } else if (auto andOp = dyn_cast<comb::AndOp>(op)) {
+        Value lhs = andOp.getInputs()[0];
+        Value rhs = andOp.getInputs()[1];
+
+        if (isa_and_nonnull<hw::ConstantOp>(rhs.getDefiningOp())) 
+            return findBitSource(lhs, bitIndex, depth + 1);
+        if (isa_and_nonnull<hw::ConstantOp>(lhs.getDefiningOp()))
+            return findBitSource(rhs, bitIndex, depth + 1);
     } 
-    else if (auto andOp = dyn_cast<comb::AndOp>(op)) {
-        mlir::Value lhs = andOp.getInputs()[0];
-        mlir::Value rhs = andOp.getInputs()[1];
-        if (mlir::isa<hw::ConstantOp>(rhs.getDefiningOp())) 
-            return findBitSource(lhs, bitIndex);
-        if (mlir::isa<hw::ConstantOp>(lhs.getDefiningOp()))
-            return findBitSource(rhs, bitIndex);
-    } 
-    
     return nullptr;
 }
 

@@ -20,8 +20,9 @@ struct VectorizationStatistics {
         llvm::errs() << "VEC_COUNT_REVERSE:" << (counts.count("REVERSE") ? counts["REVERSE"] : 0) << "\n";
         llvm::errs() << "VEC_COUNT_MIX:" << (counts.count("MIX") ? counts["MIX"] : 0) << "\n";
         llvm::errs() << "VEC_COUNT_STRUCTURAL:" << (counts.count("STRUCTURAL") ? counts["STRUCTURAL"] : 0) << "\n";
+        llvm::errs() << "VEC_COUNT_PARTIAL:" << (counts.count("PARTIAL") ? counts["PARTIAL"] : 0) << "\n";
+        llvm::errs() << "COUNT_INLINE:" << (counts.count("INLINE") ? counts["INLINE"] : 0) << "\n";
     }
     void reset() { counts.clear(); }
 };
-
 #endif // MANTICORE_VECTORIZATION_UTILS_H

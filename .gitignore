@@ -3,6 +3,13 @@ jgproject
 src/passes/Vectorization/Makefile
 /src/passes/hw-vectorization/build/
 src/chimera_testing/
+src/passes/hw-vectorization/benchmark_results
+src/passes/hw-vectorization/quick-test
+src/passes/hw-vectorization/tcl_templates
+src/passes/hw-vectorization/equivalence-check.sh
+src/passes/hw-vectorization/exec-analysis.sh
+src/passes/hw-vectorization/run_chimera.sh
+src/passes/hw-vectorization/run_benchmark.py
 scripts
 .venv
 *.so
