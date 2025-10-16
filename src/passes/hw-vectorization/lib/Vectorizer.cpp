@@ -40,7 +40,7 @@ void vectorizer::vectorize(VectorizationStatistics &stats) {
                     for (unsigned i = 0; i < bitWidth; ++i) {
                         currentPermutationMap.push_back(arr.get_bit(i).index);
                     }
-
+                    
                     if (isValidPermutation(currentPermutationMap, bitWidth)) {
                         if (arr.is_linear(bitWidth, sourceInput)) {
                             apply_linear_vectorization(oldOutputVal, sourceInput);
@@ -55,10 +55,6 @@ void vectorizer::vectorize(VectorizationStatistics &stats) {
                             stats.increment("MIX");
                             transformed = true;
                         }
-                    } else {
-                        apply_mix_vectorization(builder, oldOutputVal, sourceInput, currentPermutationMap);
-                        stats.increment("MIX");
-                        transformed = true;
                     }
                 }
             }
@@ -69,9 +65,34 @@ void vectorizer::vectorize(VectorizationStatistics &stats) {
                 continue;
             } 
             else if (can_vectorize_structurally(oldOutputVal)) {
-                apply_structural_vectorization(builder, oldOutputVal);
-                stats.increment("STRUCTURAL");
-                transformed = true;
+                Value bit0Source = findBitSource(oldOutputVal, 0);
+                Value bit1Source = findBitSource(oldOutputVal, 1);
+
+                auto extract0 = bit0Source ? bit0Source.getDefiningOp<comb::ExtractOp>() : nullptr;
+                auto extract1 = bit1Source ? bit1Source.getDefiningOp<comb::ExtractOp>() : nullptr;
+
+                bool patternApplied = false;
+                if (extract0 && extract1 && extract0.getInput() == extract1.getInput()) {
+                    Value sourceInput = extract0.getInput();
+                    int lowBit0 = extract0.getLowBit();
+                    int lowBit1 = extract1.getLowBit();
+
+                    if (lowBit1 == lowBit0 + 1) {
+                        apply_linear_vectorization(oldOutputVal, sourceInput);
+                        stats.increment("LINEAR"); 
+                        patternApplied = true;
+                    } else if (lowBit1 == lowBit0 - 1) {
+                        apply_reverse_vectorization(builder, oldOutputVal, sourceInput);
+                        stats.increment("REVERSE"); 
+                        patternApplied = true;
+                    }
+                }
+
+                if (!patternApplied) {
+                    apply_structural_vectorization(builder, oldOutputVal);
+                    stats.increment("STRUCTURAL");
+                }
+                transformed = true; 
             }
         }
 
@@ -252,43 +273,36 @@ bool vectorizer::isRecursive(mlir::Operation* startNode, llvm::SmallPtrSet<mlir:
 
 void vectorizer::process_logical_ops() {
   module.walk([&](mlir::Operation* op) {
-    if(llvm::isa<comb::OrOp, comb::AndOp>(op)) {
+    if(llvm::isa<comb::OrOp, comb::AndOp, comb::XorOp>(op)) {
       if(auto or_op = llvm::dyn_cast<comb::OrOp>(op)) {
         process_or_op(or_op);
       }
-      else {
-        auto and_op = llvm::dyn_cast<comb::AndOp>(op);
+      else if (auto and_op = llvm::dyn_cast<comb::AndOp>(op)) {
         process_and_op(and_op);
+      }
+      else { 
+        auto xor_op = llvm::dyn_cast<comb::XorOp>(op);
+        process_xor_op(xor_op);
       }
     }
   });
 }
 
+void vectorizer::process_xor_op(comb::XorOp op) {
+    mlir::Value result = op.getResult();
+
+    bit_arrays.insert({result, bit_array()});
+}
+
 void vectorizer::process_or_op(comb::OrOp op) {
     mlir::Value result = op.getResult();
-    mlir::Value lhs = op.getInputs()[0];
-    mlir::Value rhs = op.getInputs()[1];
 
-    bit_array lhs_array = bit_arrays.count(lhs) ? bit_arrays[lhs] : bit_array();
-    bit_array rhs_array = bit_arrays.count(rhs) ? bit_arrays[rhs] : bit_array();
-
-    bit_arrays.insert({result, bit_array::unite(lhs_array, rhs_array)});
+    bit_arrays.insert({result, bit_array()});
 }
 
 void vectorizer::process_and_op(comb::AndOp op) {
-    mlir::Value result = op.getResult();
-    mlir::Value lhs = op.getInputs()[0];
-    mlir::Value rhs = op.getInputs()[1];
+   mlir::Value result = op.getResult();
 
-    if (bit_arrays.count(lhs) && !bit_arrays.count(rhs)) {
-        bit_arrays.insert({result, bit_arrays[lhs]});
-        return;
-    }
-    if (bit_arrays.count(rhs) && !bit_arrays.count(lhs)) {
-        bit_arrays.insert({result, bit_arrays[rhs]});
-        return;
-    }
-    
     bit_arrays.insert({result, bit_array()});
 }
 
@@ -464,13 +478,33 @@ bool vectorizer::can_vectorize_structurally(mlir::Value output) {
 
     Value slice0Val = findBitSource(output, 0);
     if (!slice0Val || !slice0Val.getDefiningOp()) return false;
+    
+    Value slice1Val = findBitSource(output, 1);
+    if (!slice1Val || !slice1Val.getDefiningOp()) return false;
+    
+    auto extract0 = slice0Val.getDefiningOp<comb::ExtractOp>();
+    auto extract1 = slice1Val.getDefiningOp<comb::ExtractOp>();
+
+    if (!extract0 || !extract1 || extract0.getInput() != extract1.getInput()) {
+        for (unsigned i = 1; i < bitWidth; ++i) {
+            Value sliceNVal = findBitSource(output, i);
+            if (!sliceNVal || !sliceNVal.getDefiningOp()) return false;
+            llvm::DenseMap<mlir::Value, mlir::Value> map;
+            if (!areSubgraphsEquivalent(slice0Val, sliceNVal, i, 1, map)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    int stride = (int)extract1.getLowBit() - (int)extract0.getLowBit();
 
     for (unsigned i = 1; i < bitWidth; ++i) {
         Value sliceNVal = findBitSource(output, i);
         if (!sliceNVal || !sliceNVal.getDefiningOp()) return false;
 
         llvm::DenseMap<mlir::Value, mlir::Value> map;
-        if (!areSubgraphsEquivalent(slice0Val, sliceNVal, i, map)) {
+        if (!areSubgraphsEquivalent(slice0Val, sliceNVal, i, stride, map)) {
             return false;
         }
     }
@@ -540,7 +574,8 @@ bool vectorizer::isSafeSharedValue(mlir::Value val,
     return false;
 }
 
-bool vectorizer::areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value sliceNVal, unsigned sliceIndex,
+bool vectorizer::areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value sliceNVal, 
+                                        unsigned sliceIndex, int stride,
                                         llvm::DenseMap<mlir::Value, mlir::Value> &slice0ToNMap) {
     if (slice0ToNMap.count(slice0Val))
         return slice0ToNMap[slice0Val] == sliceNVal;
@@ -550,8 +585,9 @@ bool vectorizer::areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value slice
 
     if (auto extract0 = dyn_cast_or_null<comb::ExtractOp>(op0)) {
         auto extractN = dyn_cast_or_null<comb::ExtractOp>(opN);
+        // A verificação agora usa o stride para ser flexível
         if (extractN && extract0.getInput() == extractN.getInput() &&
-            extractN.getLowBit() == extract0.getLowBit() + sliceIndex) {
+            extractN.getLowBit() == (unsigned)((int)extract0.getLowBit() + (int)sliceIndex * stride)) {
             slice0ToNMap[slice0Val] = sliceNVal;
             return true;
         }
@@ -567,7 +603,7 @@ bool vectorizer::areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value slice
         return false;
 
     for (unsigned i = 0; i < op0->getNumOperands(); ++i) {
-        if (!areSubgraphsEquivalent(op0->getOperand(i), opN->getOperand(i), sliceIndex, slice0ToNMap))
+        if (!areSubgraphsEquivalent(op0->getOperand(i), opN->getOperand(i), sliceIndex, stride, slice0ToNMap))
             return false;
     }
 
@@ -630,8 +666,6 @@ mlir::Value vectorizer::vectorizeSubgraph(OpBuilder &builder, mlir::Value slice0
 }
 
 mlir::Value vectorizer::findBitSource(mlir::Value vectorVal, unsigned bitIndex, int depth) {
-    auto indent = [depth]() { return std::string(depth * 2, ' '); };
-
     if (auto blockArg = dyn_cast<BlockArgument>(vectorVal)) {
         if (blockArg.getType().isInteger(1)) {
             return blockArg;
@@ -647,6 +681,13 @@ mlir::Value vectorizer::findBitSource(mlir::Value vectorVal, unsigned bitIndex, 
     if (op->getNumResults() == 1 && op->getResult(0).getType().isInteger(1)) {
         return op->getResult(0);
     }
+    
+    if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
+        if (constOp.getType().isInteger(1)) {
+            return constOp.getResult();
+        }
+        return nullptr;
+    }
 
     if (auto concat = dyn_cast<comb::ConcatOp>(op)) {
         unsigned currentBit = cast<IntegerType>(vectorVal.getType()).getWidth();
@@ -657,16 +698,7 @@ mlir::Value vectorizer::findBitSource(mlir::Value vectorVal, unsigned bitIndex, 
                 return findBitSource(operand, bitIndex - currentBit, depth + 1);
             }
         }
-    } else if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
-        OpBuilder builder(op->getContext());
-        builder.setInsertionPoint(op); 
-        APInt value = constOp.getValue();
-        uint64_t bitValue = (bitIndex < value.getBitWidth()) ? value.getZExtValue() >> bitIndex & 1 : 0;
-        IntegerAttr constAttr = builder.getIntegerAttr(builder.getI1Type(), bitValue);
-        Value newConst = builder.create<hw::ConstantOp>(constOp.getLoc(), constAttr);
-        return newConst;
     } else if (auto orOp = dyn_cast<comb::OrOp>(op)) {
-        
         if (auto source = findBitSource(orOp.getInputs()[1], bitIndex, depth + 1)) {
              if (auto sourceConst = dyn_cast_or_null<hw::ConstantOp>(source.getDefiningOp())) {
                 if (!sourceConst.getValue().isZero()) return source;
@@ -674,17 +706,16 @@ mlir::Value vectorizer::findBitSource(mlir::Value vectorVal, unsigned bitIndex, 
                 return source;
              }
         }
-
         return findBitSource(orOp.getInputs()[0], bitIndex, depth + 1);
     } else if (auto andOp = dyn_cast<comb::AndOp>(op)) {
         Value lhs = andOp.getInputs()[0];
         Value rhs = andOp.getInputs()[1];
-
         if (isa_and_nonnull<hw::ConstantOp>(rhs.getDefiningOp())) 
             return findBitSource(lhs, bitIndex, depth + 1);
         if (isa_and_nonnull<hw::ConstantOp>(lhs.getDefiningOp()))
             return findBitSource(rhs, bitIndex, depth + 1);
     } 
+    
     return nullptr;
 }
 

@@ -31,18 +31,34 @@ struct VectorizationPass
     }
 
     void runOnOperation() override {
-        stats.reset(); 
+        stats.reset();
         mlir::ModuleOp mlir_module = getOperation();
-        
+
         SmallVector<hw::HWModuleOp, 8> hw_modules;
         for (auto module : mlir_module.getOps<hw::HWModuleOp>())
             hw_modules.push_back(module);
 
         for (auto module : hw_modules) {
+            bool containsLLHD = false;
+
+            module.walk([&](mlir::Operation *op) {
+                if (op->getDialect()->getNamespace() == "llhd") {
+                    containsLLHD = true;
+                    return mlir::WalkResult::interrupt(); 
+                }
+                return mlir::WalkResult::advance();
+            });
+
+            if (containsLLHD) {
+                // llvm::errs() << "AVISO: Pulando a vetorização do módulo '"
+                //         << module.getName() 
+                //         << "' porque ele contém operações do dialeto 'llhd', que não é suportado.\n";
+                continue; 
+            }
+
             vectorizer v(module);
             v.performInlining(stats);
             v.vectorize(stats);
-
         }
         stats.printReport();
     }

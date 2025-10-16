@@ -40,7 +40,8 @@ public:
                                           llvm::DenseMap<mlir::Value, mlir::Value> &vectorizedMap);
 
   bool can_vectorize_structurally(mlir::Value output);
-  bool areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value sliceNVal, unsigned sliceIndex,
+  bool areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value sliceNVal, 
+                                        unsigned sliceIndex, int stride,
                                         llvm::DenseMap<mlir::Value, mlir::Value> &slice0ToNMap);
   bool isValidPermutation(const std::vector<unsigned> &perm, unsigned bitWidth);
   bool can_apply_partial_vectorization(Value oldOutputVal);
@@ -57,6 +58,7 @@ public:
   void process_or_op(comb::OrOp op);
   void process_and_op(comb::AndOp op);
   void process_logical_ops();
+  void process_xor_op(comb::XorOp op);
 
   void vectorize(VectorizationStatistics &stats);
 
