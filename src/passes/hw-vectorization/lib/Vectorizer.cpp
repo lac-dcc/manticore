@@ -19,7 +19,7 @@ void vectorizer::vectorize(VectorizationStatistics &stats) {
     process_extract_ops();
     process_concat_ops();
     process_logical_ops();
-
+    
     Block &block = module.getBody().front();
     auto outputOp = dyn_cast<hw::OutputOp>(block.getTerminator());
     if (!outputOp) return;
@@ -585,7 +585,7 @@ bool vectorizer::areSubgraphsEquivalent(mlir::Value slice0Val, mlir::Value slice
 
     if (auto extract0 = dyn_cast_or_null<comb::ExtractOp>(op0)) {
         auto extractN = dyn_cast_or_null<comb::ExtractOp>(opN);
-        // A verificação agora usa o stride para ser flexível
+
         if (extractN && extract0.getInput() == extractN.getInput() &&
             extractN.getLowBit() == (unsigned)((int)extract0.getLowBit() + (int)sliceIndex * stride)) {
             slice0ToNMap[slice0Val] = sliceNVal;

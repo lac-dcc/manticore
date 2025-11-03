@@ -3,7 +3,7 @@
 BASE_NAME="test"
 
 echo "Converting Verilog to HW..."
-circt-verilog --ir-hw ${BASE_NAME}.sv -o ${BASE_NAME}.hw.mlir
+circt-verilog --ir-hw ${BASE_NAME}.v -o ${BASE_NAME}.hw.mlir
 
 echo "Running vectorization pass..."
 ~/projects/circt/build/bin/circt-opt ${BASE_NAME}.hw.mlir \

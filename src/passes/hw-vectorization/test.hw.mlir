@@ -433,22 +433,6 @@ module {
     %13 = comb.xor %11, %12 : i1
     hw.output %8 : i4
   }
-  hw.module @bit_drop(in %in : i4, out out : i4) {
-    %c0_i3 = hw.constant 0 : i3
-    %c7_i4 = hw.constant 7 : i4
-    %c0_i2 = hw.constant 0 : i2
-    %false = hw.constant false
-    %0 = comb.concat %c0_i2, %8, %false : i2, i1, i1
-    %1 = comb.concat %false, %7, %c0_i2 : i1, i1, i2
-    %2 = comb.or %1, %0 : i4
-    %3 = comb.and %2, %c7_i4 : i4
-    %4 = comb.concat %6, %c0_i3 : i1, i3
-    %5 = comb.or %4, %3 : i4
-    %6 = comb.extract %in from 3 : (i4) -> i1
-    %7 = comb.extract %in from 2 : (i4) -> i1
-    %8 = comb.extract %in from 1 : (i4) -> i1
-    hw.output %5 : i4
-  }
   hw.module @bit_duplicate(in %in : i4, out out : i4) {
     %c0_i2 = hw.constant 0 : i2
     %false = hw.constant false
@@ -490,43 +474,6 @@ module {
     %12 = comb.extract %9 from 3 : (i4) -> i1
     %13 = comb.extract %9 from 1 : (i4) -> i1
     hw.output %8 : i4
-  }
-  hw.module @LogicalShiftRightBy2(in %in : i8, out out : i8) {
-    %c63_i8 = hw.constant 63 : i8
-    %c0_i4 = hw.constant 0 : i4
-    %c0_i3 = hw.constant 0 : i3
-    %c0_i5 = hw.constant 0 : i5
-    %c0_i2 = hw.constant 0 : i2
-    %c0_i6 = hw.constant 0 : i6
-    %false = hw.constant false
-    %c-33_i8 = hw.constant -33 : i8
-    %c-17_i8 = hw.constant -17 : i8
-    %c-9_i8 = hw.constant -9 : i8
-    %c-5_i8 = hw.constant -5 : i8
-    %c0_i7 = hw.constant 0 : i7
-    %0 = comb.concat %c0_i7, %21 : i7, i1
-    %1 = comb.concat %c0_i6, %20, %false : i6, i1, i1
-    %2 = comb.or %1, %0 : i8
-    %3 = comb.and %2, %c-5_i8 : i8
-    %4 = comb.concat %c0_i5, %19, %c0_i2 : i5, i1, i2
-    %5 = comb.or %4, %3 : i8
-    %6 = comb.and %5, %c-9_i8 : i8
-    %7 = comb.concat %c0_i4, %18, %c0_i3 : i4, i1, i3
-    %8 = comb.or %7, %6 : i8
-    %9 = comb.and %8, %c-17_i8 : i8
-    %10 = comb.concat %c0_i3, %17, %c0_i4 : i3, i1, i4
-    %11 = comb.or %10, %9 : i8
-    %12 = comb.and %11, %c-33_i8 : i8
-    %13 = comb.concat %c0_i2, %16, %c0_i5 : i2, i1, i5
-    %14 = comb.or %13, %12 : i8
-    %15 = comb.and %14, %c63_i8 : i8
-    %16 = comb.extract %in from 7 : (i8) -> i1
-    %17 = comb.extract %in from 6 : (i8) -> i1
-    %18 = comb.extract %in from 5 : (i8) -> i1
-    %19 = comb.extract %in from 4 : (i8) -> i1
-    %20 = comb.extract %in from 3 : (i8) -> i1
-    %21 = comb.extract %in from 2 : (i8) -> i1
-    hw.output %15 : i8
   }
   hw.module @VectorizedEnable(in %a : i4, in %enable : i4, out o : i4) {
     %c0_i2 = hw.constant 0 : i2
