@@ -49,3 +49,7 @@ src/passes/hw-vectorization/vetorizacao_results_20001-30000.csv
 src/passes/hw-vectorization/vetorizacao_results_30001-40000.csv
 src/passes/hw-vectorization/vetorizacao_results_40001-50000.csv
 src/passes/hw-vectorization/vetorizacao_results_50001-60000.csv
+src/passes/hw-vectorization/get-vec-results.py
+src/passes/hw-vectorization/process_all.sh
+src/passes/hw-vectorization/results_vectorization.csv
+src/passes/hw-vectorization/results_without_inline.csv
