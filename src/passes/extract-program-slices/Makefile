@@ -22,25 +22,22 @@ LDFLAGS     += `$(LLVM_CONFIG) --ldflags --libs core Support` \
                -lMLIRIR -lMLIRPass -lMLIRAnalysis -lMLIRSupport -lMLIRParser -lMLIRTransforms \
                -lCIRCTComb -lCIRCTMoore -lCIRCTSV -lCIRCTHW
 
-SOURCES = lib/Outliner.cpp
+SOURCES = lib/SliceExtractor.cpp
 
 OBJDIR = build
 
 OBJECTS = $(patsubst lib/%.cpp,$(OBJDIR)/%.o,$(SOURCES))
 
-TARGET = $(OBJDIR)/HWOutliningPass.so
+TARGET = $(OBJDIR)/SliceExtractorPass.so
 
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	@echo "Ligando para criar o $@..."
 	$(CLANG) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(OBJDIR)/%.o: lib/%.cpp
 	@mkdir -p $(OBJDIR)
-	@echo "Compilando $<..."
 	$(CLANG) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	@echo "Limpando arquivos gerados..."
 	rm -rf $(OBJDIR)
