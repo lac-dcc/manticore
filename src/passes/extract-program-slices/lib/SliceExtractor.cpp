@@ -33,6 +33,71 @@ struct SliceInfo {
 class GraphComparator {
 public:
     static bool isIsomorphic(const SliceInfo& slice, hw::HWModuleOp module) {
+        Block &body = module.getBody().front();
+        
+        // 1. Collect Module Operations (ignoring hw.output)
+        // List of relevant ops to compare against the slice.
+        llvm::SmallVector<Operation*> moduleOps;
+        for (auto &op : body) {
+            if (!isa<hw::OutputOp>(op)) {
+                moduleOps.push_back(&op);
+            }
+        }
+
+        // Quick Check: Size mismatch
+        if (slice.ops.size() != moduleOps.size()) return false;
+        if (slice.inputs.size() != body.getNumArguments()) return false;
+
+        // 2. Initialize Map: Slice Value -> Module Value
+        // Slice inputs to the module arguments (ports).
+        llvm::DenseMap<Value, Value> valueMap;
+        
+        for (size_t i = 0; i < slice.inputs.size(); ++i) {
+            valueMap[slice.inputs[i]] = body.getArgument(i);
+        }
+
+        // 3. Step-by-step Comparison
+        for (size_t i = 0; i < slice.ops.size(); ++i) {
+            Operation* sliceOp = slice.ops[i];
+            Operation* moduleOp = moduleOps[i];
+
+            // A. Check Op Name (e.g., comb.add vs comb.sub)
+            if (sliceOp->getName() != moduleOp->getName()) return false;
+
+            // B. Check Result Types (Bit width must match)
+            if (sliceOp->getNumResults() != moduleOp->getNumResults()) return false;
+            for (size_t r = 0; r < sliceOp->getNumResults(); ++r) {
+                if (sliceOp->getResult(r).getType() != moduleOp->getResult(r).getType()) {
+                    return false;
+                }
+            }
+
+            // C. Check Attributes (Constants, names, parameters)
+            if (sliceOp->getAttrDictionary() != moduleOp->getAttrDictionary()) return false;
+
+            // D. Check Operands 
+            // Check if the slice operands, when translated via the map,
+            // match exactly the operands used in the module.
+            if (sliceOp->getNumOperands() != moduleOp->getNumOperands()) return false;
+            
+            for (size_t k = 0; k < sliceOp->getNumOperands(); ++k) {
+                Value sliceOperand = sliceOp->getOperand(k);
+                Value moduleOperand = moduleOp->getOperand(k);
+
+                // If the operand is not in the map, it means it's an external value
+                // that wasn't captured or a logic error.
+                if (!valueMap.count(sliceOperand)) return false;
+
+                if (valueMap[sliceOperand] != moduleOperand) return false;
+            }
+
+            // E. Update Map
+            // If ops are equal, map their results for future checks.
+            for (size_t r = 0; r < sliceOp->getNumResults(); ++r) {
+                valueMap[sliceOp->getResult(r)] = moduleOp->getResult(r);
+            }
+        }
+
         return true; 
     }
 };
