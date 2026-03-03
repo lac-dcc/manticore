@@ -257,8 +257,49 @@ public:
     }
 };
 
+struct ExtractorStatistics {
+   // Number of new modules created to encapsulate extracted logic
+    int numNewModules = 0;
+    
+    // Number of times repeated logic was replaced by a module instance
+    int numReplacedInstances = 0;
+    
+    // Estimated number of combinational operations removed from the design
+    int numOpsSaved = 0;
+    
+    // Maximum number of operations found inside a single extracted slice
+    int maxSliceSize = 0;    
+    
+    // Maximum number of input ports required by a single extracted slice
+    int maxSliceInputs = 0;
+
+    void reset() {
+        numNewModules = 0;
+        numReplacedInstances = 0;
+        numOpsSaved = 0;
+        maxSliceSize = 0;
+        maxSliceInputs = 0;
+    }
+
+    void printReport() {
+        llvm::errs() << "=======================\n\n";
+        llvm::errs() << "NewModules=" << numNewModules << "\n";
+        llvm::errs() << "ReplacedInstances=" << numReplacedInstances << "\n";
+        llvm::errs() << "OpsSaved=" << numOpsSaved << "\n";
+        llvm::errs() << "MaxSliceSize=" << maxSliceSize << "\n";
+        llvm::errs() << "MaxSliceInputs=" << maxSliceInputs << "\n";
+        llvm::errs() << "=======================\n\n";
+        
+    }
+};
+
 struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::OperationPass<mlir::ModuleOp>> {
     
+    ExtractorStatistics stats;
+
+    SliceExtractorPass() = default;
+    SliceExtractorPass(const SliceExtractorPass& pass) : stats(pass.stats) {}
+
     void getDependentDialects(mlir::DialectRegistry &registry) const override {
         registry.insert<circt::comb::CombDialect, circt::hw::HWDialect>();
     }
@@ -294,7 +335,7 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
 
         Block *newBody = newHWModule.getBodyBlock();
         
-        // FIX: Remove the default terminator created by the builder to avoid duplication
+        // Remove the default terminator created by the builder to avoid duplication
         if (Operation *terminator = newBody->getTerminator()) {
             terminator->erase();
         }
@@ -319,6 +360,8 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
     }
 
     void runOnOperation() override {
+        stats.reset();
+
         mlir::ModuleOp topModule = getOperation();
         IRRewriter rewriter(topModule.getContext());
         
@@ -380,6 +423,14 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
                 
                 // Add to catalog so we can use it in Step 4
                 moduleCatalog[h] = newModule;
+
+                stats.numNewModules++;
+
+                int currentOps = slices[0].ops.size();
+                int currentInputs = slices[0].inputs.size();
+                
+                if (currentOps > stats.maxSliceSize) stats.maxSliceSize = currentOps;
+                if (currentInputs > stats.maxSliceInputs) stats.maxSliceInputs = currentInputs;
             }
         }
 
@@ -408,6 +459,9 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
 
                     if (GraphComparator::isIsomorphic(slice, target)) {
                         instantiateAndReplace(rewriter, module, slice, target);
+
+                        stats.numReplacedInstances++; 
+                        stats.numOpsSaved += (slice.ops.size() - 1);
                     }
                 }
              }
@@ -417,6 +471,8 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
         for (auto module : topModule.getOps<hw::HWModuleOp>()) {
             if (!module.getBody().empty()) (void)mlir::runRegionDCE(rewriter, module.getBody());
         }
+
+        stats.printReport();
     }
 
     // Replaces the logic slice with an instance of the target module.
