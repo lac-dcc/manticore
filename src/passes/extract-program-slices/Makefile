@@ -1,26 +1,25 @@
-LLVM_PREFIX ?= /usr/local
-MLIR_PREFIX ?= /usr/local
-
-CIRCT_PREFIX ?= /home/mariaguimaraes/projects/circt/
+LLVM_PREFIX ?= /home/rafael-paniago/circt/llvm/build
+MLIR_PREFIX ?= /home/rafael-paniago/circt/llvm/build
+CIRCT_PREFIX ?= /home/rafael-paniago/circt
 
 LLVM_CONFIG := $(LLVM_PREFIX)/bin/llvm-config
-CLANG       := clang++
+CLANG        := clang++
 
-CXXFLAGS    += -fPIC -shared -std=c++17 -O2 -fvisibility=default \
-               -I./include \
-               -I$(MLIR_PREFIX)/include \
-               -I$(LLVM_PREFIX)/include \
-               -I$(MLIR_PREFIX)/tools/mlir/include \
-               -I$(LLVM_PREFIX)/tools/mlir/include \
-               -I$(CIRCT_PREFIX)/include \
-               -I$(CIRCT_PREFIX)/build/include \
-               `$(LLVM_CONFIG) --cxxflags`
+CXXFLAGS     += -fPIC -shared -std=c++17 -O2 -fvisibility=default \
+                -I./include \
+                -I$(MLIR_PREFIX)/include \
+                -I$(LLVM_PREFIX)/include \
+                -I$(CIRCT_PREFIX)/llvm/mlir/include \
+                -I$(CIRCT_PREFIX)/llvm/build/tools/mlir/include \
+                -I$(CIRCT_PREFIX)/include \
+                -I$(CIRCT_PREFIX)/build/include \
+                `$(LLVM_CONFIG) --cxxflags`
 
-LDFLAGS     += `$(LLVM_CONFIG) --ldflags --libs core Support` \
-               -Wl,-rpath,$(LLVM_PREFIX)/lib -L$(LLVM_PREFIX)/lib \
-               -L$(CIRCT_PREFIX)/build/lib \
-               -lMLIRIR -lMLIRPass -lMLIRAnalysis -lMLIRSupport -lMLIRParser -lMLIRTransforms \
-               -lCIRCTComb -lCIRCTMoore -lCIRCTSV -lCIRCTHW
+LDFLAGS      += `$(LLVM_CONFIG) --ldflags --libs core Support` \
+                -Wl,-rpath,$(LLVM_PREFIX)/lib -L$(LLVM_PREFIX)/lib \
+                -L$(CIRCT_PREFIX)/build/lib \
+                -lMLIRIR -lMLIRPass -lMLIRAnalysis -lMLIRSupport -lMLIRParser -lMLIRTransforms \
+                -lCIRCTComb -lCIRCTMoore -lCIRCTSV -lCIRCTHW -lCIRCTLLHD
 
 SOURCES = lib/SliceExtractor.cpp
 
@@ -41,3 +40,4 @@ $(OBJDIR)/%.o: lib/%.cpp
 
 clean:
 	rm -rf $(OBJDIR)
+
