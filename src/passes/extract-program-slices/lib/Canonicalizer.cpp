@@ -30,7 +30,7 @@ bool Canonicalizer::is_commutative(mlir::Operation* op) {
 
 }
 
-std::unique_ptr<ValueStack> Canonicalizer::get_reverse_topological_ordering(circt::hw::HWModuleOp* module){
+std::unique_ptr<ValueStack> Canonicalizer::get_topological_ordering(circt::hw::HWModuleOp* module){
 
    auto block = module->getBodyBlock();
    if(!block) return nullptr; 
@@ -48,7 +48,7 @@ std::unique_ptr<ValueStack> Canonicalizer::get_reverse_topological_ordering(circ
    }
 
    llvm::DenseSet<mlir::Value> visited(total_values);
-   std::unique_ptr<ValueStack> reverse_top_ordering = std::make_unique<ValueStack>();
+   std::unique_ptr<ValueStack> top_ordering = std::make_unique<ValueStack>();
 
    if(auto outputOp = llvm::dyn_cast<circt::hw::OutputOp>(terminator)){
       for(mlir::Value v : outputOp.getOperands()) {
@@ -85,13 +85,11 @@ std::unique_ptr<ValueStack> Canonicalizer::get_reverse_topological_ordering(circ
       if(!has_unvisited_operands){
          stack.pop_back();
          visited.insert(current);
-         reverse_top_ordering->push_back(current);
+         top_ordering->push_back(current);
       }
    }
 
-   std::reverse(reverse_top_ordering->begin(), reverse_top_ordering->end());
-
-   return reverse_top_ordering;
+   return top_ordering;
 }
 
 
