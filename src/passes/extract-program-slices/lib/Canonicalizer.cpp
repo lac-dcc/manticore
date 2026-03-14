@@ -1,5 +1,6 @@
 #include "../include/Canonicalizer.hpp"
 #include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/OperationSupport.h"
 using namespace circt;
 using namespace mlir;
 
@@ -74,10 +75,12 @@ std::unique_ptr<ValueStack> Canonicalizer::get_topological_ordering(circt::hw::H
       bool has_unvisited_operands = false;
 
       if(auto defOp = current.getDefiningOp()){
-         for(auto operand : defOp->getOperands()){
-            if(operand && !visited.count(operand)) {
-               stack.push_back(operand);
-               has_unvisited_operands = true;
+         if(defOp){
+            for(auto operand : defOp->getOperands()){
+               if(!visited.count(operand)) {
+                  stack.push_back(operand);
+                  has_unvisited_operands = true;
+               }
             }
          }
       }
@@ -93,6 +96,48 @@ std::unique_ptr<ValueStack> Canonicalizer::get_topological_ordering(circt::hw::H
 }
 
 
+void Canonicalizer::flatten(circt::hw::HWModuleOp* module){
+
+   auto top_ordering = get_topological_ordering(module);
+   if(!top_ordering) return;
+   mlir::IRRewriter rewriter(module->getContext());
+
+   for(auto current_val : *top_ordering){
+
+      bool needs_flattening = false;
+      llvm::SmallVector<mlir::Value, 8> new_operands;
+      auto defining_op = current_val.getDefiningOp();
+
+      if(defining_op && is_associative(defining_op)){
+
+         for(auto args : defining_op->getOperands()){
+            auto arg_defign_op = args.getDefiningOp();
+            if(arg_defign_op && arg_defign_op->getName() == defining_op->getName()){
+               needs_flattening = true;
+               new_operands.append(arg_defign_op->operand_begin(), arg_defign_op->operand_end());
+            }
+            else{
+               new_operands.push_back(args);
+            }
+         }
+      } 
+
+      if(needs_flattening){
+
+         rewriter.setInsertionPoint(defining_op);
+
+         mlir::OperationState new_state(defining_op->getLoc(), defining_op->getName());
+
+         new_state.addOperands(new_operands);
+         new_state.addTypes(defining_op->getResultTypes());
+         new_state.addAttributes(defining_op->getAttrs());
+
+         mlir::Operation* new_operation = rewriter.create(new_state);
+
+         rewriter.replaceOp(defining_op, new_operation->getResults());
+      }
+   }
+}
 
 
 
