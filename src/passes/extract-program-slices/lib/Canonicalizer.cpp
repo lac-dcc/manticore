@@ -31,7 +31,8 @@ bool Canonicalizer::is_commutative(mlir::Operation* op) {
 
 }
 
-std::unique_ptr<ValueStack> Canonicalizer::get_topological_ordering(circt::hw::HWModuleOp* module, llvm::DenseSet<mlir::Value> invalid_flattening){
+std::unique_ptr<ValueStack> Canonicalizer::get_top_order_and_sccs(circt::hw::HWModuleOp* module, llvm::EquivalenceClasses<mlir::Value> scc_dsu
+){
 
    auto block = module->getBodyBlock();
    if(!block) return nullptr; 
@@ -98,8 +99,8 @@ std::unique_ptr<ValueStack> Canonicalizer::get_topological_ordering(circt::hw::H
 
 void Canonicalizer::flatten(circt::hw::HWModuleOp* module){
 
-   llvm::DenseSet<Value> invalid_flatenning; 
-   auto top_ordering = get_topological_ordering(module, invalid_flatenning);
+   llvm::EquivalenceClasses<mlir::Value> scc_dsu;
+   auto top_ordering = get_top_order_and_sccs(module, scc_dsu);
    if(!top_ordering) return;
    mlir::IRRewriter rewriter(module->getContext());
 
@@ -109,11 +110,11 @@ void Canonicalizer::flatten(circt::hw::HWModuleOp* module){
       llvm::SmallVector<mlir::Value, 8> new_operands;
       auto defining_op = current_val.getDefiningOp();
 
-      if(!invalid_flatenning.count(current_val) && defining_op && is_associative(defining_op)){
+      if(defining_op && is_associative(defining_op)){
 
          for(auto args : defining_op->getOperands()){
             auto arg_defign_op = args.getDefiningOp();
-            if(!invalid_flatenning.count(current_val) && arg_defign_op && arg_defign_op->getName() == defining_op->getName()){
+            if(!scc_dsu.isEquivalent(current_val, args) && arg_defign_op && arg_defign_op->getName() == defining_op->getName()){
                needs_flattening = true;
                new_operands.append(arg_defign_op->operand_begin(), arg_defign_op->operand_end());
             }

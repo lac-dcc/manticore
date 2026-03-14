@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "llvm/ADT/EquivalenceClasses.h"
 
 using ValueStack = llvm::SmallVector<mlir::Value>;
 
@@ -41,7 +42,8 @@ private:
    void flatten(circt::hw::HWModuleOp* module);
    void sort(circt::hw::HWModuleOp* module);
    void reduce(circt::hw::HWModuleOp* module);
-   std::unique_ptr<ValueStack> get_topological_ordering(circt::hw::HWModuleOp* module, llvm::DenseSet<mlir::Value> invalid_operations);
+   void is_alone_in_scc(llvm::EquivalenceClasses<mlir::Value>& scc_dsu, mlir::Value value);
+   std::unique_ptr<ValueStack> get_top_order_and_sccs(circt::hw::HWModuleOp* module,llvm::EquivalenceClasses<mlir::Value> scc_dsu); 
    
 };
 
