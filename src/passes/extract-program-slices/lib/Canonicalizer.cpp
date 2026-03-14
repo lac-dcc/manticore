@@ -31,7 +31,7 @@ bool Canonicalizer::is_commutative(mlir::Operation* op) {
 
 }
 
-std::unique_ptr<ValueStack> Canonicalizer::get_top_order_and_sccs(circt::hw::HWModuleOp* module, llvm::EquivalenceClasses<mlir::Value> scc_dsu
+std::unique_ptr<ValueStack> Canonicalizer::get_top_order_and_sccs(circt::hw::HWModuleOp* module, llvm::EquivalenceClasses<mlir::Value>& scc_dsu
 ){
 
    auto block = module->getBodyBlock();
@@ -103,8 +103,11 @@ void Canonicalizer::flatten(circt::hw::HWModuleOp* module){
    auto top_ordering = get_top_order_and_sccs(module, scc_dsu);
    if(!top_ordering) return;
    mlir::IRRewriter rewriter(module->getContext());
+   llvm::SmallVector<mlir::Operation*> ops_to_erase;
 
    for(auto current_val : *top_ordering){
+
+      if(current_val.use_empty()) continue;
 
       bool needs_flattening = false;
       llvm::SmallVector<mlir::Value, 8> new_operands;
@@ -135,9 +138,17 @@ void Canonicalizer::flatten(circt::hw::HWModuleOp* module){
          new_state.addAttributes(defining_op->getAttrs());
 
          mlir::Operation* new_operation = rewriter.create(new_state);
+         mlir::Value new_value = new_operation->getResult(0);
 
-         rewriter.replaceOp(defining_op, new_operation->getResults());
+         scc_dsu.unionSets(current_val, new_value);
+
+         rewriter.replaceAllUsesWith(current_val, new_value);
+         ops_to_erase.push_back(defining_op);
       }
+   }
+
+   for(auto* op : ops_to_erase){
+      rewriter.eraseOp(op);
    }
 }
 

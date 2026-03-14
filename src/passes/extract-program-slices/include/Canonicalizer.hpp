@@ -43,7 +43,7 @@ private:
    void sort(circt::hw::HWModuleOp* module);
    void reduce(circt::hw::HWModuleOp* module);
    void is_alone_in_scc(llvm::EquivalenceClasses<mlir::Value>& scc_dsu, mlir::Value value);
-   std::unique_ptr<ValueStack> get_top_order_and_sccs(circt::hw::HWModuleOp* module,llvm::EquivalenceClasses<mlir::Value> scc_dsu); 
+   std::unique_ptr<ValueStack> get_top_order_and_sccs(circt::hw::HWModuleOp* module,llvm::EquivalenceClasses<mlir::Value>& scc_dsu); 
    
 };
 
