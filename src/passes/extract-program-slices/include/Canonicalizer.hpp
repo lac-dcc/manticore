@@ -41,7 +41,7 @@ private:
    void flatten(circt::hw::HWModuleOp* module);
    void sort(circt::hw::HWModuleOp* module);
    void reduce(circt::hw::HWModuleOp* module);
-   std::unique_ptr<ValueStack> get_topological_ordering(circt::hw::HWModuleOp* module, llvm::DenseSet<mlir::Operation*> invalid_operations);
+   std::unique_ptr<ValueStack> get_topological_ordering(circt::hw::HWModuleOp* module, llvm::DenseSet<mlir::Value> invalid_operations);
    
 };
 
