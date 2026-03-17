@@ -1,6 +1,7 @@
 #include "../include/Canonicalizer.hpp"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OperationSupport.h"
+#include "llvm/ADT/STLExtras.h"
 using namespace circt;
 using namespace mlir;
 
@@ -8,12 +9,14 @@ Canonicalizer::Canonicalizer(llvm::DenseSet<llvm::StringRef> targetOps){
    this->targetOps = targetOps;
 }
 
-void Canonicalizer::canonicalize(circt::hw::HWModuleOp* module){
+void Canonicalizer::canonicalize(mlir::ModuleOp top_module){
 
-   this->flatten(module);
-   this->sort(module);
-   this->reduce(module);
-
+   for (auto module : top_module.getOps<hw::HWModuleOp>()) {
+      if(module.getBody().empty()) continue;
+      flatten(module);
+      //this->sort(&module);
+      //this->reduce(&module);
+   }
 } 
 
 bool Canonicalizer::is_associative(mlir::Operation* op) {
@@ -31,10 +34,9 @@ bool Canonicalizer::is_commutative(mlir::Operation* op) {
 
 }
 
-std::unique_ptr<ValueStack> Canonicalizer::get_top_order_and_sccs(circt::hw::HWModuleOp* module, llvm::EquivalenceClasses<mlir::Value>& scc_dsu
-){
+std::unique_ptr<ValueStack> Canonicalizer::get_top_ord(circt::hw::HWModuleOp module){
 
-   auto block = module->getBodyBlock();
+   auto block = module.getBodyBlock();
    if(!block) return nullptr; 
    
    ValueStack stack;
@@ -50,6 +52,7 @@ std::unique_ptr<ValueStack> Canonicalizer::get_top_order_and_sccs(circt::hw::HWM
    }
 
    llvm::DenseSet<mlir::Value> visited(total_values);
+   llvm::DenseSet<mlir::Value> in_stack;
    std::unique_ptr<ValueStack> top_ordering = std::make_unique<ValueStack>();
 
    if(auto outputOp = llvm::dyn_cast<circt::hw::OutputOp>(terminator)){
@@ -80,6 +83,7 @@ std::unique_ptr<ValueStack> Canonicalizer::get_top_order_and_sccs(circt::hw::HWM
             for(auto operand : defOp->getOperands()){
                if(!visited.count(operand)) {
                   stack.push_back(operand);
+                  in_stack.insert(operand);
                   has_unvisited_operands = true;
                }
             }
@@ -88,6 +92,7 @@ std::unique_ptr<ValueStack> Canonicalizer::get_top_order_and_sccs(circt::hw::HWM
 
       if(!has_unvisited_operands){
          stack.pop_back();
+         in_stack.erase(current);
          visited.insert(current);
          top_ordering->push_back(current);
       }
@@ -97,10 +102,9 @@ std::unique_ptr<ValueStack> Canonicalizer::get_top_order_and_sccs(circt::hw::HWM
 }
 
 
-void Canonicalizer::flatten(circt::hw::HWModuleOp* module){
+void Canonicalizer::flatten(circt::hw::HWModuleOp module){
 
-   llvm::EquivalenceClasses<mlir::Value> scc_dsu;
-   auto top_ordering = get_top_order_and_sccs(module, scc_dsu);
+   auto top_ordering = get_top_ord(module);
    if(!top_ordering) return;
    mlir::IRRewriter rewriter(module->getContext());
    llvm::SmallVector<mlir::Operation*> ops_to_erase;
@@ -117,7 +121,7 @@ void Canonicalizer::flatten(circt::hw::HWModuleOp* module){
 
          for(auto args : defining_op->getOperands()){
             auto arg_defign_op = args.getDefiningOp();
-            if(!scc_dsu.isEquivalent(current_val, args) && arg_defign_op && arg_defign_op->getName() == defining_op->getName()){
+            if(arg_defign_op && arg_defign_op->getName() == defining_op->getName()){
                needs_flattening = true;
                new_operands.append(arg_defign_op->operand_begin(), arg_defign_op->operand_end());
             }
@@ -140,8 +144,6 @@ void Canonicalizer::flatten(circt::hw::HWModuleOp* module){
          mlir::Operation* new_operation = rewriter.create(new_state);
          mlir::Value new_value = new_operation->getResult(0);
 
-         scc_dsu.unionSets(current_val, new_value);
-
          rewriter.replaceAllUsesWith(current_val, new_value);
          ops_to_erase.push_back(defining_op);
       }
@@ -151,6 +153,34 @@ void Canonicalizer::flatten(circt::hw::HWModuleOp* module){
       rewriter.eraseOp(op);
    }
 }
+
+
+void Canonicalizer::sort(circt::hw::HWModuleOp module){
+
+   auto block = module.getBodyBlock();
+   mlir::IRRewriter rewriter(module->getContext());
+
+   for(auto& operation : block->getOperations()){
+
+      if(!is_commutative(&operation)) continue;
+
+      llvm::SmallVector<mlir::Value> new_operands;
+
+      for(auto operand : operation.getOperands()){
+         new_operands.push_back(operand);
+      }
+
+      auto lexicographical_sort = [this](mlir::Value a, mlir::Value b) -> bool{
+
+      };
+
+      llvm::sort(new_operands.begin(), new_operands.end(), lexicographical_sort);
+      //IMPLEMENT LAMBDA FUNCTION THAT FINDS PRIMARY KEYS TO EACH DIFFERENT mlir::Value
+      //llvm::sort(new_operands, function_should_go_here); 
+      operation.setOperands(new_operands);
+   }
+}
+
 
 
 
