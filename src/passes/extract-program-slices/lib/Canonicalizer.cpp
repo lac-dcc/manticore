@@ -1,9 +1,10 @@
 #include "../include/Canonicalizer.hpp"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/Moore/MooreOps.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/APInt.h"
 using namespace circt;
 using namespace mlir;
@@ -35,6 +36,79 @@ bool Canonicalizer::is_commutative(mlir::Operation* op) {
    if(!op) return false;
    return op->hasTrait<mlir::OpTrait::IsCommutative>();
 
+}
+
+void Canonicalizer::reduce(circt::hw::HWModuleOp module){
+   
+   auto block = module.getBodyBlock();
+   mlir::IRRewriter rewriter(module->getContext());
+
+   for(auto& operation : block->getOperations()){
+
+      llvm::SmallSetVector<Value, 4> new_operands; 
+      auto op_name = operation.getName().getStringRef();
+
+      llvm::SmallVector<mlir::Value, 4> operands(operation.getOperands().begin(), operation.getOperands().end());
+
+      if(operands.empty()) continue;
+
+      if(op_name == "comb.add"){
+         for(auto operand : operands){
+            auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
+            if(!(option_const && option_const.getValue().isZero())){
+               new_operands.insert(operand);
+            }
+         }
+      }
+      else if(op_name == "comb.and"){
+         for(auto operand : operands){
+            auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
+            if(option_const && option_const.getValue().isZero()){
+               new_operands.clear();
+               new_operands.insert(operand);
+               break;
+            }
+            if(!(option_const && option_const.getValue().isAllOnes())){
+               new_operands.insert(operand);
+            }
+         }
+      }
+      else if(op_name == "comb.mul"){
+         for(auto operand : operands){
+            auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
+            if(option_const && option_const.getValue().isZero()){
+               new_operands.clear();
+               new_operands.insert(operand);
+               break;
+            }
+            if(!(option_const && option_const.getValue().isOne())){
+               new_operands.insert(operand);
+            }
+         }
+      }
+      else if(op_name == "comb.xor"){
+      }
+      else if(op_name == "comb.or"){
+         for(auto operand : operands){
+            auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
+            if(option_const && option_const.getValue().isAllOnes()){
+               new_operands.clear();
+               new_operands.insert(operand);
+               break;
+            }
+            if(!(option_const && option_const.getValue().isZero())){
+               new_operands.insert(operand);
+            }
+         }
+      }
+      else{
+         for(auto operand : operands) new_operands.insert(operand);
+      }
+
+      rewriter.modifyOpInPlace(&operation, [&](){
+         operation.setOperands(new_operands.getArrayRef());
+      });
+   }
 }
 
 std::unique_ptr<ValueStack> Canonicalizer::get_top_ord(circt::hw::HWModuleOp module){
