@@ -43,12 +43,14 @@ void Canonicalizer::reduce(circt::hw::HWModuleOp module){
    auto block = module.getBodyBlock();
    mlir::IRRewriter rewriter(module->getContext());
 
-   for(auto& operation : block->getOperations()){
+   for(auto& operation : llvm::make_early_inc_range(block->getOperations())){
 
-      llvm::SmallSetVector<Value, 4> new_operands; 
+      llvm::SmallVector<Value, 4> new_operands; 
       auto op_name = operation.getName().getStringRef();
 
       llvm::SmallVector<mlir::Value, 4> operands(operation.getOperands().begin(), operation.getOperands().end());
+
+      bool has_changed = false;
 
       if(operands.empty()) continue;
 
@@ -56,7 +58,7 @@ void Canonicalizer::reduce(circt::hw::HWModuleOp module){
          for(auto operand : operands){
             auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
             if(!(option_const && option_const.getValue().isZero())){
-               new_operands.insert(operand);
+               new_operands.push_back(operand);
             }
          }
       }
@@ -64,12 +66,13 @@ void Canonicalizer::reduce(circt::hw::HWModuleOp module){
          for(auto operand : operands){
             auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
             if(option_const && option_const.getValue().isZero()){
+               rewriter.replaceOp(&operation, operand);
                new_operands.clear();
-               new_operands.insert(operand);
+               has_changed = true;
                break;
             }
             if(!(option_const && option_const.getValue().isAllOnes())){
-               new_operands.insert(operand);
+               if(!llvm::is_contained(new_operands, operand)) new_operands.push_back(operand);
             }
          }
       }
@@ -77,37 +80,45 @@ void Canonicalizer::reduce(circt::hw::HWModuleOp module){
          for(auto operand : operands){
             auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
             if(option_const && option_const.getValue().isZero()){
-               new_operands.clear();
-               new_operands.insert(operand);
+               rewriter.replaceOp(&operation, operand);
+               has_changed = true;
+               new_operands.clear(); 
                break;
             }
             if(!(option_const && option_const.getValue().isOne())){
-               new_operands.insert(operand);
+               new_operands.push_back(operand);
             }
          }
-      }
-      else if(op_name == "comb.xor"){
       }
       else if(op_name == "comb.or"){
          for(auto operand : operands){
             auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
             if(option_const && option_const.getValue().isAllOnes()){
+               rewriter.replaceOp(&operation, operand);
+               has_changed = true;
                new_operands.clear();
-               new_operands.insert(operand);
                break;
             }
             if(!(option_const && option_const.getValue().isZero())){
-               new_operands.insert(operand);
+               if(!llvm::is_contained(new_operands, operand)) new_operands.push_back(operand);
             }
          }
       }
       else{
-         for(auto operand : operands) new_operands.insert(operand);
+         has_changed = true;
       }
 
-      rewriter.modifyOpInPlace(&operation, [&](){
-         operation.setOperands(new_operands.getArrayRef());
-      });
+      if(has_changed) continue;
+
+
+      if (new_operands.empty()) rewriter.replaceOp(&operation, operands[0]);
+      else if(new_operands.size() == 1) rewriter.replaceOp(&operation, new_operands[0]);
+      else if(new_operands.size() < operands.size()){
+
+         rewriter.modifyOpInPlace(&operation, [&](){
+            operation.setOperands(new_operands);
+         });
+      }
    }
 }
 
