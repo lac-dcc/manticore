@@ -1,7 +1,10 @@
 #include "../include/Canonicalizer.hpp"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Moore/MooreOps.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OperationSupport.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/APInt.h"
 using namespace circt;
 using namespace mlir;
 
@@ -172,12 +175,51 @@ void Canonicalizer::sort(circt::hw::HWModuleOp module){
 
       auto lexicographical_sort = [this](mlir::Value a, mlir::Value b) -> bool{
 
+         if(a == b) return false;
+
+         //Constant sorting
+         auto const_op_a = a.getDefiningOp<circt::hw::ConstantOp>();
+         auto const_op_b = b.getDefiningOp<circt::hw::ConstantOp>();
+
+         bool a_is_const = const_op_a != nullptr;
+         bool b_is_const = const_op_b != nullptr; 
+
+         if(a_is_const != b_is_const) return a_is_const < b_is_const;
+
+         else if(a_is_const && b_is_const){
+
+            auto val_a = const_op_a.getValue();
+            auto val_b = const_op_b.getValue();
+            if(val_a.getBitWidth() != val_b.getBitWidth()){
+               return val_a.getBitWidth() < val_b.getBitWidth();
+            }
+            return val_a.ult(val_b);
+         } 
+
+         //Block Argument Sorting
+         auto a_optional_arg = llvm::dyn_cast<mlir::BlockArgument>(a);
+         auto b_optional_arg = llvm::dyn_cast<mlir::BlockArgument>(b);
+         bool a_is_arg = a_optional_arg != nullptr;
+         bool b_is_arg = b_optional_arg != nullptr;
+
+         if(a_is_arg != b_is_arg) return a_is_arg > b_is_arg;
+         else if(a_is_arg && b_is_arg) return a_optional_arg.getArgNumber() < b_optional_arg.getArgNumber();
+
+         //Operand sorting 
+         mlir::Operation* a_op = a.getDefiningOp();
+         mlir::Operation* b_op = b.getDefiningOp();
+
+         if(a_op->getBlock() == b_op->getBlock()){
+            return a_op->isBeforeInBlock(b_op);
+         }
+
+         return a.getAsOpaquePointer() < b.getAsOpaquePointer();
       };
 
-      llvm::sort(new_operands.begin(), new_operands.end(), lexicographical_sort);
-      //IMPLEMENT LAMBDA FUNCTION THAT FINDS PRIMARY KEYS TO EACH DIFFERENT mlir::Value
-      //llvm::sort(new_operands, function_should_go_here); 
-      operation.setOperands(new_operands);
+      llvm::sort(new_operands, lexicographical_sort);
+      rewriter.modifyOpInPlace(&operation, [&] () {
+         operation.setOperands(new_operands);
+      });
    }
 }
 
