@@ -169,6 +169,7 @@ std::unique_ptr<ValueStack> Canonicalizer::get_top_ord(circt::hw::HWModuleOp mod
       if(auto defOp = current.getDefiningOp()){
          if(defOp){
             for(auto operand : defOp->getOperands()){
+               if(in_stack.count(operand)) continue;
                if(!visited.count(operand)) {
                   stack.push_back(operand);
                   in_stack.insert(operand);
