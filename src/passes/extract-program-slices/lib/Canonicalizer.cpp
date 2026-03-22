@@ -18,8 +18,8 @@ void Canonicalizer::canonicalize(mlir::ModuleOp top_module){
    for (auto module : top_module.getOps<hw::HWModuleOp>()) {
       if(module.getBody().empty()) continue;
       flatten(module);
-      //this->sort(&module);
-      //this->reduce(&module);
+      sort(module);
+      reduce(module);
    }
 } 
 
@@ -302,9 +302,11 @@ void Canonicalizer::sort(circt::hw::HWModuleOp module){
       };
 
       llvm::sort(new_operands, lexicographical_sort);
-      rewriter.modifyOpInPlace(&operation, [&] () {
-         operation.setOperands(new_operands);
-      });
+      if(!llvm::equal(operation.getOperands(), new_operands)){
+         rewriter.modifyOpInPlace(&operation, [&] () {
+            operation.setOperands(new_operands);
+         });
+      }
    }
 }
 
