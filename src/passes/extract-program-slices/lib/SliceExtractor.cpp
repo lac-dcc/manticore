@@ -32,11 +32,12 @@ struct SliceInfo {
 
 class GraphComparator {
 public:
-    static bool isIsomorphic(const SliceInfo& slice, hw::HWModuleOp module) {
+    static bool isIsomorphic(const SliceInfo& candidateSlice,
+                             const SliceInfo& referenceSlice,
+                             hw::HWModuleOp module) {
         Block &body = module.getBody().front();
-        
+
         // 1. Collect Module Operations (ignoring hw.output)
-        // List of relevant ops to compare against the slice.
         llvm::SmallVector<Operation*> moduleOps;
         for (auto &op : body) {
             if (!isa<hw::OutputOp>(op)) {
@@ -44,55 +45,52 @@ public:
             }
         }
 
-        // Quick Check: Size mismatch
-        if (slice.ops.size() != moduleOps.size()) return false;
-        if (slice.inputs.size() != body.getNumArguments()) return false;
+        // Quick size checks
+        if (candidateSlice.ops.size() != moduleOps.size()) return false;
+        if (candidateSlice.inputs.size() != referenceSlice.inputs.size()) return false;
+        if (candidateSlice.inputs.size() != body.getNumArguments()) return false;
 
-        // 2. Initialize Map: Slice Value -> Module Value
-        // Slice inputs to the module arguments (ports).
+        // 2. Build the value map guided by the reference slice ordering.
         llvm::DenseMap<Value, Value> valueMap;
-        
-        for (size_t i = 0; i < slice.inputs.size(); ++i) {
-            valueMap[slice.inputs[i]] = body.getArgument(i);
+        for (size_t i = 0; i < candidateSlice.inputs.size(); ++i) {
+            Value candInput = candidateSlice.inputs[i];
+            Value moduleArg  = body.getArgument(i);
+
+            // Types must match.
+            if (candInput.getType() != moduleArg.getType()) return false;
+
+            valueMap[candInput] = moduleArg;
         }
 
-        // 3. Step-by-step Comparison
-        for (size_t i = 0; i < slice.ops.size(); ++i) {
-            Operation* sliceOp = slice.ops[i];
+        // 3. Step-by-step comparison
+        for (size_t i = 0; i < candidateSlice.ops.size(); ++i) {
+            Operation* sliceOp  = candidateSlice.ops[i];
             Operation* moduleOp = moduleOps[i];
 
-            // A. Check Op Name (e.g., comb.add vs comb.sub)
+            // A. Op name
             if (sliceOp->getName() != moduleOp->getName()) return false;
 
-            // B. Check Result Types (Bit width must match)
+            // B. Result types
             if (sliceOp->getNumResults() != moduleOp->getNumResults()) return false;
             for (size_t r = 0; r < sliceOp->getNumResults(); ++r) {
-                if (sliceOp->getResult(r).getType() != moduleOp->getResult(r).getType()) {
+                if (sliceOp->getResult(r).getType() != moduleOp->getResult(r).getType())
                     return false;
-                }
             }
 
-            // C. Check Attributes (Constants, names, parameters)
+            // C. Attributes
             if (sliceOp->getAttrDictionary() != moduleOp->getAttrDictionary()) return false;
 
-            // D. Check Operands 
-            // Check if the slice operands, when translated via the map,
-            // match exactly the operands used in the module.
+            // D. Operands (translated through the value map)
             if (sliceOp->getNumOperands() != moduleOp->getNumOperands()) return false;
-            
             for (size_t k = 0; k < sliceOp->getNumOperands(); ++k) {
-                Value sliceOperand = sliceOp->getOperand(k);
+                Value sliceOperand  = sliceOp->getOperand(k);
                 Value moduleOperand = moduleOp->getOperand(k);
 
-                // If the operand is not in the map, it means it's an external value
-                // that wasn't captured or a logic error.
                 if (!valueMap.count(sliceOperand)) return false;
-
                 if (valueMap[sliceOperand] != moduleOperand) return false;
             }
 
-            // E. Update Map
-            // If ops are equal, map their results for future checks.
+            // E. Update map with results
             for (size_t r = 0; r < sliceOp->getNumResults(); ++r) {
                 valueMap[sliceOp->getResult(r)] = moduleOp->getResult(r);
             }
@@ -109,13 +107,12 @@ public:
     static llvm::hash_code hashModule(hw::HWModuleOp module) {
         if (module.getBody().empty()) return llvm::hash_value(0);
         
-        // Treat the module body as a single large slice.
         SliceInfo fullSlice;
         Block &body = module.getBody().front();
         
         for (auto arg : body.getArguments()) {
             fullSlice.inputs.insert(arg);
-        } 
+        }
         
         for (auto &op : body) {
             if (!isa<hw::OutputOp>(op)) {
@@ -123,8 +120,7 @@ public:
             }
         }
         
-        // 1. Hash the Module Signature (Ports).
-        // Only consider INPUT ports to ensure compatibility with extracted slices.
+        // Hash the module signature (input port types in declaration order).
         llvm::hash_code sigHash = llvm::hash_value(0);
         auto moduleType = module.getModuleType();
         for (auto port : moduleType.getPorts()) {
@@ -146,29 +142,24 @@ public:
     }
 
 private:
-    // Maps values to sequential indices (0, 1, 2...) to ignore variable names.
     static llvm::hash_code hashSliceContent(const SliceInfo& slice) {
         llvm::hash_code code = llvm::hash_value(0);
 
         llvm::DenseMap<Value, unsigned> valueNumbering;
         unsigned nextValueIdx = 0;
 
-        // 1. Map Inputs to sequential indices.
         for (Value input : slice.inputs) {
             valueNumbering[input] = nextValueIdx++;
         }
 
-        // 2. Hash Operations in topological order.
         for (Operation *op : slice.ops) {
             code = llvm::hash_combine(code, op->getName().getStringRef());
 
-            // Assign indices to results.
             for (Value result : op->getResults()) {
                 code = llvm::hash_combine(code, result.getType().getAsOpaquePointer());
                 valueNumbering[result] = nextValueIdx++;
             }
 
-            // Hash operands using the canonical index.
             for (Value operand : op->getOperands()) {
                 if (valueNumbering.count(operand)) {
                     code = llvm::hash_combine(code, valueNumbering[operand]);
@@ -205,7 +196,6 @@ public:
 
         llvm::SetVector<Operation*> opsFound;
 
-        // Backward traversal to find the logic cone.
         while (!worklist.empty()) {
             Value current = worklist.pop_back_val();
             Operation *op = current.getDefiningOp();
@@ -225,28 +215,53 @@ public:
             }
         }
 
-        // Restore topological order (Inputs -> Outputs).
-        for (Operation *op : llvm::reverse(opsFound)) {
-            slice.ops.insert(op);
+        Block *parentBlock = root.getDefiningOp()->getBlock();
+        for (Operation &op : parentBlock->getOperations()) {
+            if (opsFound.contains(&op)) {
+                slice.ops.insert(&op);
+            }
         }
 
-        // Sort inputs deterministically to match the original module's signature.
-        // This ensures [z, x, y] becomes [x, y, z] if they correspond to arg0, arg1, arg2.
+        llvm::DenseMap<Operation*, unsigned> opPosition;
+        {
+            unsigned pos = 0;
+            for (Operation *op : slice.ops) {
+                opPosition[op] = pos++;
+            }
+        }
+
         auto inputsVec = slice.inputs.takeVector();
-        
-        llvm::sort(inputsVec, [](Value a, Value b) {
+
+        llvm::sort(inputsVec, [&opPosition](Value a, Value b) {
             auto argA = dyn_cast<BlockArgument>(a);
             auto argB = dyn_cast<BlockArgument>(b);
-            
-            if (argA && argB) {
+
+            // Both are block arguments: sort by argument number.
+            if (argA && argB)
                 return argA.getArgNumber() < argB.getArgNumber();
-            }
-            if (argA) return true; 
+
+            // Block arguments before op results.
+            if (argA) return true;
             if (argB) return false;
-            
-            return a.getAsOpaquePointer() < b.getAsOpaquePointer();
+
+            // Both are op results: sort by the op's topological position,
+            // then by result index within the op.
+            auto resA = cast<OpResult>(a);
+            auto resB = cast<OpResult>(b);
+
+            Operation *opA = resA.getDefiningOp();
+            Operation *opB = resB.getDefiningOp();
+
+            unsigned posA = opPosition.count(opA) ? opPosition.lookup(opA) : UINT_MAX;
+            unsigned posB = opPosition.count(opB) ? opPosition.lookup(opB) : UINT_MAX;
+
+            if (posA != posB) return posA < posB;
+
+            return resA.getResultNumber() < resB.getResultNumber();
         });
 
+        // Re-insert in the now-deterministic canonical order.
+        // takeVector() already emptied the SetVector, so insert is safe.
         slice.inputs.insert(inputsVec.begin(), inputsVec.end());
 
         return slice;
@@ -258,19 +273,10 @@ public:
 };
 
 struct ExtractorStatistics {
-   // Number of new modules created to encapsulate extracted logic
     int numNewModules = 0;
-    
-    // Number of times repeated logic was replaced by a module instance
     int numReplacedInstances = 0;
-    
-    // Estimated number of combinational operations removed from the design
     int numOpsSaved = 0;
-    
-    // Maximum number of operations found inside a single extracted slice
     int maxSliceSize = 0;    
-    
-    // Maximum number of input ports required by a single extracted slice
     int maxSliceInputs = 0;
 
     void reset() {
@@ -289,7 +295,6 @@ struct ExtractorStatistics {
         llvm::errs() << "MaxSliceSize=" << maxSliceSize << "\n";
         llvm::errs() << "MaxSliceInputs=" << maxSliceInputs << "\n";
         llvm::errs() << "=======================\n\n";
-        
     }
 };
 
@@ -304,13 +309,10 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
         registry.insert<circt::comb::CombDialect, circt::hw::HWDialect>();
     }
 
-    // Helper to create a new module from a Slice
     hw::HWModuleOp createNewModule(OpBuilder &builder, mlir::ModuleOp topModule, const SliceInfo &slice, std::string name) {
         
-        // Ensure we insert the module at the top of the file
         builder.setInsertionPointToStart(topModule.getBody());
         
-        // Define Ports
         SmallVector<hw::PortInfo> ports;
         int inputIdx = 0;
         for (Value input : slice.inputs) {
@@ -328,21 +330,18 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
             ports.push_back(p);
         }
 
-        // Create the Module
         auto newHWModule = builder.create<hw::HWModuleOp>(
             builder.getUnknownLoc(), builder.getStringAttr(name), ports, builder.getArrayAttr({}) 
         );
 
         Block *newBody = newHWModule.getBodyBlock();
         
-        // Remove the default terminator created by the builder to avoid duplication
         if (Operation *terminator = newBody->getTerminator()) {
             terminator->erase();
         }
         
         builder.setInsertionPointToStart(newBody);
 
-        // Map inputs and clone operations
         IRMapping mapper;
         for (size_t i = 0; i < slice.inputs.size(); ++i) {
             mapper.map(slice.inputs[i], newBody->getArgument(i));
@@ -352,7 +351,6 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
             builder.clone(*op, mapper);
         }
 
-        // Create the final output
         Value resultInNewModule = mapper.lookup(slice.rootOutput);
         builder.create<hw::OutputOp>(builder.getUnknownLoc(), resultInNewModule);
         
@@ -366,28 +364,27 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
         IRRewriter rewriter(topModule.getContext());
         
         // Step 1: Catalog Existing Modules
-        // Calculate hash for all modules to serve as potential "Masters".
         llvm::DenseMap<llvm::hash_code, hw::HWModuleOp> moduleCatalog;
         
         for (auto module : topModule.getOps<hw::HWModuleOp>()) {
             if (module.getBody().empty()) continue;
             auto h = StructuralHasher::hashModule(module);
-            // Only add if not already present (preserve the first one).
             if (moduleCatalog.count(h) == 0) {
                 moduleCatalog[h] = module;
             }
         }
 
-        // Step 2: Mining Frequent Patterns 
-        // Scan the code to find repeated logic that isn't a module yet.
-        // Map: Hash -> List of Slices found
-        llvm::DenseMap<llvm::hash_code, llvm::SmallVector<SliceInfo, 4>> sliceHistogram;
+        // Step 2: Mining Frequent Patterns
+        struct SliceGroup {
+            SliceInfo referenceSlice;                      // the one used to create the module
+            llvm::SmallVector<SliceInfo, 4> allSlices;     // all occurrences (including reference)
+        };
+        llvm::DenseMap<llvm::hash_code, SliceGroup> sliceHistogram;
 
         for (auto module : topModule.getOps<hw::HWModuleOp>()) {
             if (module.getBody().empty()) continue;
             Block &body = module.getBody().front();
             
-            // Snapshot operations to iterate safely
             llvm::SmallVector<Operation*> opsToCheck;
             for (auto &op : body) opsToCheck.push_back(&op);
 
@@ -396,75 +393,88 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
                 
                 SliceInfo slice = LogicAnalyzer::getBackwardSlice(op->getResult(0));
                 
-                // Filter: Ignore tiny slices (e.g., single operations)
                 if (slice.ops.size() < 2) continue;
 
                 auto h = StructuralHasher::hashSlice(slice);
-                sliceHistogram[h].push_back(slice);
+
+                auto &group = sliceHistogram[h];
+                if (group.allSlices.empty()) {
+                    // First occurrence becomes the reference.
+                    group.referenceSlice = slice;
+                }
+                group.allSlices.push_back(slice);
             }
         }
 
-        // Step 3: Create New Modules 
+        // Step 3: Create New Modules
         int extractedCounter = 0;
         
         for (auto &it : sliceHistogram) {
             llvm::hash_code h = it.first;
-            auto &slices = it.second;
+            auto &group = it.second;
 
-            // 1. If it's NOT in the catalog yet
-            // 2. AND it appears more than once
-            // 3. Create a new module
-            if (moduleCatalog.count(h) == 0 && slices.size() > 1) {
+            if (moduleCatalog.count(h) == 0 && group.allSlices.size() > 1) {
                 
                 std::string newName = "extracted_" + std::to_string(extractedCounter++);
                 
-                // Create module using the first slice as a template
-                hw::HWModuleOp newModule = createNewModule(rewriter, topModule, slices[0], newName);
+                // Create module using the reference (first) slice as template.
+                hw::HWModuleOp newModule = createNewModule(rewriter, topModule, group.referenceSlice, newName);
                 
-                // Add to catalog so we can use it in Step 4
                 moduleCatalog[h] = newModule;
 
                 stats.numNewModules++;
 
-                int currentOps = slices[0].ops.size();
-                int currentInputs = slices[0].inputs.size();
+                int currentOps    = group.referenceSlice.ops.size();
+                int currentInputs = group.referenceSlice.inputs.size();
                 
-                if (currentOps > stats.maxSliceSize) stats.maxSliceSize = currentOps;
+                if (currentOps    > stats.maxSliceSize)   stats.maxSliceSize   = currentOps;
                 if (currentInputs > stats.maxSliceInputs) stats.maxSliceInputs = currentInputs;
             }
         }
 
-        // Step 4: Instantiation 
-        // Now we replace logic with instances from the Catalog (Originals + Extracted).
+        // Step 4: Instantiation
         for (auto module : topModule.getOps<hw::HWModuleOp>()) {
-             if (module.getBody().empty()) continue;
-             Block &body = module.getBody().front();
-             llvm::SmallVector<Operation*> opsToCheck;
-             for (auto &op : body) opsToCheck.push_back(&op);
+            if (module.getBody().empty()) continue;
+            Block &body = module.getBody().front();
+            llvm::SmallVector<Operation*> opsToCheck;
+            for (auto &op : body) opsToCheck.push_back(&op);
 
-             for (Operation *op : opsToCheck) {
+            for (Operation *op : opsToCheck) {
                 if (op->getNumResults() == 0 || !LogicAnalyzer::isCombinational(op)) continue;
                 
-                // Recalculate slice
                 SliceInfo slice = LogicAnalyzer::getBackwardSlice(op->getResult(0));
                 if (slice.ops.size() < 2) continue;
 
-                // Recalculate hash
                 auto h = StructuralHasher::hashSlice(slice);
 
                 if (moduleCatalog.count(h)) {
                     hw::HWModuleOp target = moduleCatalog[h];
-                    // Prevent recursion (don't instantiate a module inside itself)
-                    if (target == module) continue; 
+                    if (target == module) continue;
 
-                    if (GraphComparator::isIsomorphic(slice, target)) {
+                    const SliceInfo *refSlice = nullptr;
+                    if (sliceHistogram.count(h)) {
+                        refSlice = &sliceHistogram[h].referenceSlice;
+                    }
+
+                    SliceInfo moduleBodySlice;
+                    if (!refSlice) {
+                        Block &targetBody = target.getBody().front();
+                        for (auto arg : targetBody.getArguments())
+                            moduleBodySlice.inputs.insert(arg);
+                        for (auto &bodyOp : targetBody)
+                            if (!isa<hw::OutputOp>(bodyOp))
+                                moduleBodySlice.ops.insert(&bodyOp);
+                        refSlice = &moduleBodySlice;
+                    }
+
+                    if (GraphComparator::isIsomorphic(slice, *refSlice, target)) {
                         instantiateAndReplace(rewriter, module, slice, target);
 
                         stats.numReplacedInstances++; 
                         stats.numOpsSaved += (slice.ops.size() - 1);
                     }
                 }
-             }
+            }
         }
 
         // Step 5: Cleanup
@@ -475,9 +485,8 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
         stats.printReport();
     }
 
-    // Replaces the logic slice with an instance of the target module.
     void instantiateAndReplace(IRRewriter &rewriter, hw::HWModuleOp parentModule, 
-                             const SliceInfo &slice, hw::HWModuleOp targetModule) {
+                               const SliceInfo &slice, hw::HWModuleOp targetModule) {
         
         Operation *rootOp = slice.rootOutput.getDefiningOp();
         rewriter.setInsertionPointAfter(rootOp);
@@ -495,7 +504,6 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
             rewriter.getArrayAttr({})
         );
         
-        // Replace uses of the old logic result with the instance result.
         Value valToReplace = slice.rootOutput; 
         valToReplace.replaceAllUsesWith(instance.getResult(0));
     }
