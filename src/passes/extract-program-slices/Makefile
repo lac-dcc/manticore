@@ -21,7 +21,7 @@ LDFLAGS      += `$(LLVM_CONFIG) --ldflags --libs core Support` \
                 -lMLIRIR -lMLIRPass -lMLIRAnalysis -lMLIRSupport -lMLIRParser -lMLIRTransforms \
                 -lCIRCTComb -lCIRCTMoore -lCIRCTSV -lCIRCTHW -lCIRCTLLHD
 
-SOURCES = lib/SliceExtractor.cpp
+SOURCES = $(wildcard lib/*.cpp)
 
 OBJDIR = build
 

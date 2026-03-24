@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "../include/Canonicalizer.hpp"
 
 using namespace mlir;
 using namespace circt;
@@ -361,6 +362,19 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
         stats.reset();
 
         mlir::ModuleOp topModule = getOperation();
+
+        llvm::DenseSet<llvm::StringRef> targetOps = {
+         "comb.add",
+         "comb.mul",
+         "comb.and",
+         "comb.xor",
+         "comb.or"
+         };
+         
+        Canonicalizer canonicalizer(targetOps);
+        canonicalizer.canonicalize(topModule);
+        
+
         IRRewriter rewriter(topModule.getContext());
         
         // Step 1: Catalog Existing Modules

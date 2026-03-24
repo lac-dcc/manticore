@@ -15,6 +15,7 @@ scripts
 *.mlir
 
 # Test files
+src/passes/extract-program-slices/compile_flags.txt
 src/passes/hw-vectorization/resultados
 src/passes/hw-vectorization/check.py
 src/passes/hw-vectorization/comparar_designs.py
