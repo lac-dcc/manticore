@@ -30,6 +30,64 @@ struct SliceInfo {
     Value rootOutput;                
 };
 
+// Evaluates if extracting a logic slice into a new module is beneficial for hardware area and routing.
+struct CostModel {
+    static constexpr int WeightOp = 10;
+
+    static constexpr int PenaltyInstance = 5;
+    static constexpr int PenaltyRouting = 3;
+
+    static constexpr int W_input = 4;
+    static constexpr int W_fanout = 5;
+    static constexpr int W_size = 1;
+    static constexpr int W_coupling = 2;
+
+    static constexpr int MinOps = 4;
+
+    static constexpr int MinFrequency = 3;
+    static constexpr int MaxInputs = 8;
+    static constexpr int MaxOps = 25;
+
+    // Calculates the expected hardware profit of extracting a slice.
+    // Profit = (Cost of keeping it inline) - (Cost of creating the new module and its instances)
+    static int calculateProfit(const SliceInfo& slice, int frequency) {
+        int numOps = slice.ops.size();
+        int numInputs = slice.inputs.size();
+
+        if (numOps < MinOps || frequency < MinFrequency) {
+            return INT_MIN;
+        }
+        if (numInputs > MaxInputs || numOps > MaxOps) {
+            return INT_MIN;
+        }
+
+        int sliceCost = numOps * WeightOp;
+
+        int originalCost = frequency * sliceCost;
+
+        int moduleDefCost = sliceCost; 
+        
+        int instanceCost = frequency * PenaltyInstance;
+        int routingCost = frequency * numInputs * PenaltyRouting;
+        
+        int inputPenalty = numInputs * numInputs * W_input;
+        int fanoutPenalty = (frequency - 1) * W_fanout;
+        int sizePenalty = numOps * W_size;
+        int couplingPenalty = numInputs * frequency * W_coupling;
+
+        int newTotalCost = moduleDefCost + instanceCost + routingCost + 
+                           inputPenalty + fanoutPenalty + sizePenalty + couplingPenalty;
+
+        return originalCost - newTotalCost;
+    }
+
+    // Returns true if the extraction is profitable.
+    static bool shouldExtract(const SliceInfo& slice, int frequency) {
+        return calculateProfit(slice, frequency) > 0;
+    }
+};
+
+
 class GraphComparator {
 public:
     static bool isIsomorphic(const SliceInfo& candidateSlice,
@@ -413,7 +471,11 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
             llvm::hash_code h = it.first;
             auto &group = it.second;
 
-            if (moduleCatalog.count(h) == 0 && group.allSlices.size() > 1) {
+            if (moduleCatalog.count(h) == 0) {
+
+                if (!CostModel::shouldExtract(group.referenceSlice, group.allSlices.size())) {
+                    continue;
+                }
                 
                 std::string newName = "extracted_" + std::to_string(extractedCounter++);
                 

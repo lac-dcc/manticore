@@ -53,3 +53,4 @@ src/passes/hw-vectorization/get-vec-results.py
 src/passes/hw-vectorization/process_all.sh
 src/passes/hw-vectorization/results_vectorization.csv
 src/passes/hw-vectorization/results_without_inline.csv
+src/passes/extract-program-slices/lib/SliceExtractor.cpp

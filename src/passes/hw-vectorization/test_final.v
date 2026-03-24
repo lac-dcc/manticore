@@ -269,4 +269,3 @@ module cross_dependency(	// test.cleaned.mlir:272:3
   assign _GEN = in[1] ^ _GEN_0;	// test.cleaned.mlir:274:10, :275:10, :276:10
   assign out = {_GEN, _GEN_0};	// test.cleaned.mlir:274:10, :276:10, :277:10, :278:5
 endmodule
-
