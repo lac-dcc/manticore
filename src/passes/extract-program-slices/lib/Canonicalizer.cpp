@@ -19,7 +19,6 @@ void Canonicalizer::canonicalize(mlir::ModuleOp top_module){
       if(module.getBody().empty()) continue;
       flatten(module);
       sort(module);
-      reduce(module);
    }
 } 
 
@@ -38,89 +37,6 @@ bool Canonicalizer::is_commutative(mlir::Operation* op) {
 
 }
 
-void Canonicalizer::reduce(circt::hw::HWModuleOp module){
-   
-   auto block = module.getBodyBlock();
-   mlir::IRRewriter rewriter(module->getContext());
-
-   for(auto& operation : llvm::make_early_inc_range(block->getOperations())){
-
-      llvm::SmallVector<Value, 4> new_operands; 
-      auto op_name = operation.getName().getStringRef();
-
-      llvm::SmallVector<mlir::Value, 4> operands(operation.getOperands().begin(), operation.getOperands().end());
-
-      bool has_changed = false;
-
-      if(operands.empty()) continue;
-
-      if(op_name == "comb.add"){
-         for(auto operand : operands){
-            auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
-            if(!(option_const && option_const.getValue().isZero())){
-               new_operands.push_back(operand);
-            }
-         }
-      }
-      else if(op_name == "comb.and"){
-         for(auto operand : operands){
-            auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
-            if(option_const && option_const.getValue().isZero()){
-               rewriter.replaceOp(&operation, operand);
-               new_operands.clear();
-               has_changed = true;
-               break;
-            }
-            if(!(option_const && option_const.getValue().isAllOnes())){
-               if(!llvm::is_contained(new_operands, operand)) new_operands.push_back(operand);
-            }
-         }
-      }
-      else if(op_name == "comb.mul"){
-         for(auto operand : operands){
-            auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
-            if(option_const && option_const.getValue().isZero()){
-               rewriter.replaceOp(&operation, operand);
-               has_changed = true;
-               new_operands.clear(); 
-               break;
-            }
-            if(!(option_const && option_const.getValue().isOne())){
-               new_operands.push_back(operand);
-            }
-         }
-      }
-      else if(op_name == "comb.or"){
-         for(auto operand : operands){
-            auto option_const = operand.getDefiningOp<circt::hw::ConstantOp>();
-            if(option_const && option_const.getValue().isAllOnes()){
-               rewriter.replaceOp(&operation, operand);
-               has_changed = true;
-               new_operands.clear();
-               break;
-            }
-            if(!(option_const && option_const.getValue().isZero())){
-               if(!llvm::is_contained(new_operands, operand)) new_operands.push_back(operand);
-            }
-         }
-      }
-      else{
-         has_changed = true;
-      }
-
-      if(has_changed) continue;
-
-
-      if (new_operands.empty()) rewriter.replaceOp(&operation, operands[0]);
-      else if(new_operands.size() == 1) rewriter.replaceOp(&operation, new_operands[0]);
-      else if(new_operands.size() < operands.size()){
-
-         rewriter.modifyOpInPlace(&operation, [&](){
-            operation.setOperands(new_operands);
-         });
-      }
-   }
-}
 
 std::unique_ptr<ValueStack> Canonicalizer::get_top_ord(circt::hw::HWModuleOp module){
 
