@@ -16,7 +16,6 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/HW/HWAttributes.h"
 #include "../include/Canonicalizer.hpp"
 
 using namespace mlir;
@@ -364,6 +363,7 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
         mlir::ModuleOp topModule = getOperation();
 
         llvm::DenseSet<llvm::StringRef> targetOps = {
+         //"comb.add",
          "comb.mul",
          "comb.and",
          "comb.xor",
@@ -493,6 +493,19 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
         // Step 5: Cleanup
         for (auto module : topModule.getOps<hw::HWModuleOp>()) {
             if (!module.getBody().empty()) (void)mlir::runRegionDCE(rewriter, module.getBody());
+        }
+
+        llvm::SmallVector<hw::HWModuleOp> modulesToDelete;
+        for (auto module : topModule.getOps<hw::HWModuleOp>()) {
+            if (mlir::SymbolTable::symbolKnownUseEmpty(module, topModule)) {
+                if (module.getName().starts_with("extracted_")) { 
+                    modulesToDelete.push_back(module);
+                }
+            }
+        }
+
+        for (auto module : modulesToDelete) {
+            module.erase();
         }
 
         stats.printReport();
