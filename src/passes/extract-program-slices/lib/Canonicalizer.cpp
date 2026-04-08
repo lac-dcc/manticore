@@ -127,8 +127,31 @@ void Canonicalizer::flatten(circt::hw::HWModuleOp module){
          for(auto args : defining_op->getOperands()){
             auto arg_defign_op = args.getDefiningOp();
             if(arg_defign_op && arg_defign_op->getName() == defining_op->getName()){
-               needs_flattening = true;
-               new_operands.append(arg_defign_op->operand_begin(), arg_defign_op->operand_end());
+
+               //Deal with the particular addition case
+               if(defining_op->getName().getStringRef() == "comb.add"){
+
+                  bool allowed_addition_flattening = true;
+                  for(auto child_arg : arg_defign_op->getOperands()){
+                     if(auto constOp = child_arg.getDefiningOp<circt::hw::ConstantOp>()){
+                        if(constOp.getValue().isNegative()){
+                           allowed_addition_flattening = false;
+                           break;
+                        }
+                     }
+                  }
+                  if(allowed_addition_flattening) {
+                     new_operands.append(arg_defign_op->operand_begin(), arg_defign_op->operand_end());
+                     needs_flattening = true;
+                  }
+                  else{
+                     new_operands.push_back(args);
+                  }
+               }
+               else{
+                  needs_flattening = true;
+                  new_operands.append(arg_defign_op->operand_begin(), arg_defign_op->operand_end());
+               }
             }
             else{
                new_operands.push_back(args);
