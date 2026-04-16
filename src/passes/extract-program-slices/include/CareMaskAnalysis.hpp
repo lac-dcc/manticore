@@ -1,3 +1,4 @@
+#include "circt/Dialect/Comb/CombOps.h"
 #include "mlir/Analysis/DataFlow/SparseAnalysis.h"
 #include "mlir/Analysis/DataFlowFramework.h"
 #include "mlir/IR/Operation.h"
@@ -16,7 +17,7 @@ class CareMaskLattice : public mlir::dataflow::Lattice<CareMaskValue>{
 
 public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CareMaskLattice);
-   mlir::ChangeResult meet(const CareMaskValue &rhs);
+   mlir::ChangeResult meet(const CareMaskValue& rhs);
 };
 
 class CareMaskAnalysis : public mlir::dataflow::SparseBackwardDataFlowAnalysis<CareMaskLattice>{
@@ -24,5 +25,9 @@ class CareMaskAnalysis : public mlir::dataflow::SparseBackwardDataFlowAnalysis<C
    mlir::LogicalResult initialize(mlir::Operation *top) override;
 
    mlir::LogicalResult visitOperation(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results) override;
-
+   mlir::LogicalResult visitExtOp(circt::comb::ExtractOp op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results);
+   mlir::LogicalResult visitAddOp(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results);
+   mlir::LogicalResult visitMuxOp(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results);
+   mlir::LogicalResult visitAndOp(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results);
+   mlir::LogicalResult visitConcatOp(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results);
 };
