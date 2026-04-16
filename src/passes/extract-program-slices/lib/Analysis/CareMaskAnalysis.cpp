@@ -11,6 +11,12 @@ CareMaskValue::CareMaskValue(llvm::APInt v) : mask{v} {
    this->isUnitialized = false;
 };
 
+CareMaskValue::CareMaskValue() : isUnitialized(true) {}; 
+
+void CareMaskValue::print(llvm::raw_ostream &os) const {
+        if (isUnitialized) os << "uninitialized";
+        else os << "mask(" << mask << ")";
+    }
 
 bool CareMaskValue::operator==(const CareMaskValue& rhs) const{
    if(rhs.isUnitialized != this->isUnitialized) return false;
@@ -62,6 +68,15 @@ mlir::LogicalResult CareMaskAnalysis::initialize(mlir::Operation *top){
    });
 
    return mlir::dataflow::SparseBackwardDataFlowAnalysis<CareMaskLattice>::initialize(top);
+}
+
+void CareMaskAnalysis::setToExitState(CareMaskLattice *lattice){
+
+      auto anchor = lattice->getAnchor();
+      if(auto val = llvm::dyn_cast_if_present<mlir::Value>(anchor)){
+         auto width = val.getType().getIntOrFloatBitWidth();
+         (void)lattice->meet(CareMaskValue(llvm::APInt::getAllOnes(width)));
+      }
 }
 
 mlir::LogicalResult CareMaskAnalysis::visitOperation(mlir::Operation* op,
