@@ -30,4 +30,5 @@ class CareMaskAnalysis : public mlir::dataflow::SparseBackwardDataFlowAnalysis<C
    mlir::LogicalResult visitMuxOp(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results);
    mlir::LogicalResult visitAndOp(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results);
    mlir::LogicalResult visitConcatOp(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results);
+   mlir::LogicalResult visitInst(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results);
 };

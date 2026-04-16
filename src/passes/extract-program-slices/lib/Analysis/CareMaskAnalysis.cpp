@@ -74,6 +74,7 @@ mlir::LogicalResult CareMaskAnalysis::visitOperation(mlir::Operation* op,
    if(auto muxOp = llvm::dyn_cast<circt::comb::MuxOp>(op)) return visitMuxOp(muxOp, operands, results);
    if(auto conOp = llvm::dyn_cast<circt::comb::ConcatOp>(op)) return visitConcatOp(conOp, operands, results);
    if(auto andOp = llvm::dyn_cast<circt::comb::AndOp>(op)) return visitAndOp(andOp, operands, results);
+   if(auto instanceOp = llvm::dyn_cast<circt::hw::InstanceOp>(op)) return visitInst(instanceOp, operands, results);
    return mlir::success();
   
 }
@@ -169,3 +170,28 @@ mlir::LogicalResult CareMaskAnalysis::visitConcatOp(mlir::Operation *op, llvm::A
 }
 
 
+mlir::LogicalResult CareMaskAnalysis::visitInst(mlir::Operation* op, 
+                                                
+    llvm::ArrayRef<CareMaskLattice *> operands, 
+    llvm::ArrayRef<const CareMaskLattice *> results) {
+    
+    auto instOp = llvm::cast<circt::hw::InstanceOp>(op);
+    auto module = mlir::SymbolTable::lookupNearestSymbolFrom<circt::hw::HWModuleOp>(
+        op, instOp.getModuleNameAttr());
+
+    if (!module) return mlir::success(); 
+
+    auto outputOp = cast<circt::hw::OutputOp>(module.getBodyBlock()->getTerminator());
+    for (size_t i = 0; i < results.size(); ++i) {
+        auto *internalSignalLattice = getLatticeElement(outputOp.getOperand(i));
+        propagateIfChanged(internalSignalLattice, internalSignalLattice->meet(results[i]->getValue()));
+    }
+
+    auto *body = module.getBodyBlock();
+    for (size_t i = 0; i < operands.size(); ++i) {
+        auto *argLattice = getLatticeElement(body->getArgument(i));
+        propagateIfChanged(operands[i], operands[i]->meet(argLattice->getValue()));
+    }
+
+    return mlir::success();
+}
