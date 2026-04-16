@@ -39,7 +39,7 @@ public:
    explicit CareMaskAnalysis(mlir::DataFlowSolver &solver, mlir::SymbolTableCollection &symbolTable) 
        : mlir::dataflow::SparseBackwardDataFlowAnalysis<CareMaskLattice>(solver, symbolTable) {} 
 
-   void setToExitState(CareMaskLattice *lattice) override {}
+   void setToExitState(CareMaskLattice *lattice) override;
    void visitBranchOperand(mlir::OpOperand &operand) override {}
    void visitCallOperand(mlir::OpOperand &operand) override {}
 
