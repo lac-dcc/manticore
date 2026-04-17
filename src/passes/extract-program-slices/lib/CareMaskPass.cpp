@@ -33,7 +33,7 @@ void DontCareReducer::apply_masks(mlir::ModuleOp topModule) {
                 if (mask.isAllOnes())
                     continue;
 
-                auto maskConst = circt::hw::ConstantOp::create(builder, loc, val.getType(), mask);
+                auto maskConst = circt::hw::ConstantOp::create(builder, loc, mask);
                 auto maskedVal = circt::comb::AndOp::create(builder, loc, val.getType(), {val, maskConst});
 
                 operand.set(maskedVal);
