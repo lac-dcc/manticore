@@ -1,3 +1,4 @@
+#include "mlir/Analysis/DataFlow/DeadCodeAnalysis.h"
 #include "../include/CareMaskAnalysis.hpp"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -43,7 +44,7 @@ mlir::ChangeResult CareMaskLattice::meet(const CareMaskValue &rhs){
    }
 
    else{
-      auto& old_val = lval1.mask;
+      auto old_val = lval1.mask;
       lval1.mask = lval1.mask | lval2.mask;
       return old_val == lval1.mask ? mlir::ChangeResult::NoChange : mlir::ChangeResult::Change;
    }
@@ -71,15 +72,24 @@ void CareMaskAnalysis::setToExitState(CareMaskLattice *lattice){
 
 mlir::LogicalResult CareMaskAnalysis::initialize(mlir::Operation *top) {
 
-    top->walk([&](circt::hw::OutputOp op) {
-        for (mlir::Value operand : op.getOperands()) {
-            auto *lattice = getLatticeElement(operand);
 
-            setToExitState(lattice);
-        }
+    top->walk([&](mlir::Block *block) {
+        auto *exec = this->getOrCreate<mlir::dataflow::Executable>(getProgramPointBefore(block));
+        propagateIfChanged(exec, exec->setToLive());
     });
 
-    return mlir::success();
+    if (failed(mlir::dataflow::SparseBackwardDataFlowAnalysis<CareMaskLattice>::initialize(top))) {
+        return mlir::failure();
+    }
+        top->walk([&](circt::hw::OutputOp op) {
+            for (mlir::Value operand : op.getOperands()) {
+               auto *lattice = getLatticeElement(operand);
+
+               setToExitState(lattice);
+            }
+        });
+
+   return mlir::success();
 }
 
 
