@@ -180,20 +180,23 @@ mlir::LogicalResult CareMaskAnalysis::visitInst(mlir::Operation* op,
     llvm::ArrayRef<const CareMaskLattice *> results) {
     
     auto instOp = llvm::cast<circt::hw::InstanceOp>(op);
-    auto module = mlir::SymbolTable::lookupNearestSymbolFrom<circt::hw::HWModuleOp>(
+    circt::hw::HWModuleOp module = mlir::SymbolTable::lookupNearestSymbolFrom<circt::hw::HWModuleOp>(
         op, instOp.getModuleNameAttr());
 
     if (!module) return mlir::success(); 
 
-    auto outputOp = cast<circt::hw::OutputOp>(module.getBodyBlock()->getTerminator());
+    auto outputOp = llvm::cast<circt::hw::OutputOp>(module.getBodyBlock()->getTerminator());
     for (size_t i = 0; i < results.size(); ++i) {
         auto *internalSignalLattice = getLatticeElement(outputOp.getOperand(i));
+
         propagateIfChanged(internalSignalLattice, internalSignalLattice->meet(results[i]->getValue()));
     }
 
     auto *body = module.getBodyBlock();
     for (size_t i = 0; i < operands.size(); ++i) {
         auto *argLattice = getLatticeElement(body->getArgument(i));
+
+        addDependency(argLattice, getProgramPointAfter(op));
         propagateIfChanged(operands[i], operands[i]->meet(argLattice->getValue()));
     }
 
