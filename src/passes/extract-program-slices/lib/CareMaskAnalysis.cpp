@@ -49,34 +49,23 @@ mlir::ChangeResult CareMaskLattice::meet(const CareMaskValue &rhs){
    }
 } 
 
-mlir::LogicalResult CareMaskAnalysis::initialize(mlir::Operation *top){
-   
-   top->walk([&](circt::hw::OutputOp outputOp){
-
-      auto operands = outputOp.getOperands();
-      for(auto operand : operands){
-
-         if(!operand.getType().isIntOrFloat()) continue;
-
-         auto bitWidth = operand.getType().getIntOrFloatBitWidth();
-         llvm::APInt mask = llvm::APInt::getAllOnes(bitWidth);
-         CareMaskValue mv = CareMaskValue(mask);
-         CareMaskLattice* lat = getLatticeElement(operand);
-         auto result = lat->meet(mv);
-         propagateIfChanged(lat, result);
-      }
-   });
-
-   return mlir::dataflow::SparseBackwardDataFlowAnalysis<CareMaskLattice>::initialize(top);
-}
 
 void CareMaskAnalysis::setToExitState(CareMaskLattice *lattice){
 
-      auto anchor = lattice->getAnchor();
-      if(auto val = llvm::dyn_cast_if_present<mlir::Value>(anchor)){
-         auto width = val.getType().getIntOrFloatBitWidth();
-         (void)lattice->meet(CareMaskValue(llvm::APInt::getAllOnes(width)));
-      }
+   mlir::Value value = lattice->getAnchor();
+   if(!value.getType().isIntOrFloat()) return;
+
+   auto block = value.getParentBlock();
+   auto parentOp = block->getParentOp();
+
+   if(auto moduleOp = llvm::dyn_cast<circt::hw::HWModuleOp>(parentOp)){
+
+      if(moduleOp.isPrivate()) return;
+
+      llvm::APInt mask = llvm::APInt::getAllOnes(value.getType().getIntOrFloatBitWidth());
+      auto meetValue = CareMaskValue(mask);
+      propagateIfChanged(lattice,lattice->meet(meetValue));
+   }
 }
 
 mlir::LogicalResult CareMaskAnalysis::visitOperation(mlir::Operation* op,

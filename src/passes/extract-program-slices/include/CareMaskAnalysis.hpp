@@ -43,7 +43,6 @@ public:
    void visitBranchOperand(mlir::OpOperand &operand) override {}
    void visitCallOperand(mlir::OpOperand &operand) override {}
 
-   mlir::LogicalResult initialize(mlir::Operation *top) override;
    void visitNonControlFlowArguments(mlir::RegionSuccessor &successor, 
                                      llvm::ArrayRef<mlir::BlockArgument> argLattices) override {}
    mlir::LogicalResult visitOperation(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results) override;
