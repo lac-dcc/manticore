@@ -68,6 +68,21 @@ void CareMaskAnalysis::setToExitState(CareMaskLattice *lattice){
    }
 }
 
+
+mlir::LogicalResult CareMaskAnalysis::initialize(mlir::Operation *top) {
+
+    top->walk([&](circt::hw::OutputOp op) {
+        for (mlir::Value operand : op.getOperands()) {
+            auto *lattice = getLatticeElement(operand);
+
+            setToExitState(lattice);
+        }
+    });
+
+    return mlir::success();
+}
+
+
 mlir::LogicalResult CareMaskAnalysis::visitOperation(mlir::Operation* op,
                                                      llvm::ArrayRef<CareMaskLattice *> operands, 
                                                      llvm::ArrayRef<const CareMaskLattice *> results){
