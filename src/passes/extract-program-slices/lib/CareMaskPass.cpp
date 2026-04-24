@@ -85,7 +85,7 @@ void DontCareReducer::print_statistics() {
    llvm::outs() << "Completely useless modules: "<<completelyUselessModules<<"\n";
    llvm::outs() << "Total output module bits: "<<totalOutputModuleBits<<"\n";
    llvm::outs() << "Mean Useless Bits: "<<static_cast<double>(meanUselessBits)<<"\n";
-   llvm::outs() << "Pass execution time"<<passTimer.getTotalTime().getWallTime() << "seconds\n";
+   llvm::outs() << "Pass execution time: "<<passTimer.getTotalTime().getWallTime() << "seconds\n";
    llvm::outs() << "\n\n";
 }
 
