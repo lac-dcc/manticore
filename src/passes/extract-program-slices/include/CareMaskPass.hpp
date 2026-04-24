@@ -1,3 +1,4 @@
+#include "llvm/Support/Timer.h"
 #include "CareMaskAnalysis.hpp"
 #include "llvm/Support/float128.h"
 #include <cstdint>
@@ -6,15 +7,16 @@ class DontCareReducer{
 
 private:
 
-   uint64_t uselessBits = 0; 
-   uint64_t completelyUselessModules = 0;
-   uint64_t totalOutputModuleBits = 0; 
-   llvm::float128 meanUselessBits = 0;
+   uint64_t uselessBits; 
+   uint64_t completelyUselessModules;
+   uint64_t totalOutputModuleBits; 
+   llvm::float128 meanUselessBits;
+   llvm::Timer passTimer;
 
 
 public:
 
-   DontCareReducer() = default;
+   DontCareReducer();
    void apply_masks(mlir::ModuleOp topModule);
    void gather_statistics(mlir::ModuleOp topModule);
    void print_statistics();

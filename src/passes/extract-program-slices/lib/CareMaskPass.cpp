@@ -7,6 +7,13 @@
 #include "llvm/Support/float128.h"
 #include "../include/CareMaskPass.hpp"
 
+DontCareReducer::DontCareReducer() : passTimer("dont_care_timer", "Time spent in DontCareReducer pass") {
+   uselessBits = 0;
+   completelyUselessModules = 0;
+   totalOutputModuleBits = 0;
+   meanUselessBits = 0;
+}
+
 void DontCareReducer::apply_masks(mlir::ModuleOp topModule) {
 
    mlir::SymbolTableCollection symbolTables;
@@ -47,10 +54,12 @@ void DontCareReducer::apply_masks(mlir::ModuleOp topModule) {
 
 void DontCareReducer::gather_statistics(mlir::ModuleOp topModule) {
 
+   passTimer.startTimer();
    mlir::SymbolTableCollection symbolTables;
    mlir::DataFlowSolver solver;
    auto analysisResult = solver.load<CareMaskAnalysis>(symbolTables);
    if(failed(solver.initializeAndRun(topModule))) return;
+   passTimer.stopTimer();
 
    topModule.walk([&](circt::hw::OutputOp op){
 
@@ -76,6 +85,7 @@ void DontCareReducer::print_statistics() {
    llvm::outs() << "Completely useless modules: "<<completelyUselessModules<<"\n";
    llvm::outs() << "Total output module bits: "<<totalOutputModuleBits<<"\n";
    llvm::outs() << "Mean Useless Bits: "<<static_cast<double>(meanUselessBits)<<"\n";
+   llvm::outs() << "Pass execution time"<<passTimer.getTotalTime().getWallTime() << "seconds\n";
    llvm::outs() << "\n\n";
 }
 
