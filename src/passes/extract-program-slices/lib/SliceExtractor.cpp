@@ -364,7 +364,7 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
         mlir::ModuleOp topModule = getOperation();
         DontCareReducer reducer;
         reducer.apply_masks(topModule);
-
+        return;
         llvm::DenseSet<llvm::StringRef> targetOps = {
          //"comb.add",
          "comb.mul",
