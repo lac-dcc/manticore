@@ -1,3 +1,4 @@
+#include "CareMaskPass.hpp"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
@@ -361,7 +362,9 @@ struct SliceExtractorPass : public mlir::PassWrapper<SliceExtractorPass, mlir::O
         stats.reset();
 
         mlir::ModuleOp topModule = getOperation();
-
+        DontCareReducer reducer;
+        reducer.apply_masks(topModule);
+        return;
         llvm::DenseSet<llvm::StringRef> targetOps = {
          //"comb.add",
          "comb.mul",
