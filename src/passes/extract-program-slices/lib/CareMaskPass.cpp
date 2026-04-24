@@ -4,6 +4,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/SymbolTable.h"
+#include "llvm/Support/float128.h"
 #include "../include/CareMaskPass.hpp"
 
 void DontCareReducer::apply_masks(mlir::ModuleOp topModule) {
@@ -43,5 +44,42 @@ void DontCareReducer::apply_masks(mlir::ModuleOp topModule) {
 
    topModule.walk(masking_policy);
 }; 
+
+void DontCareReducer::gather_statistics(mlir::ModuleOp topModule) {
+
+   mlir::SymbolTableCollection symbolTables;
+   mlir::DataFlowSolver solver;
+   auto analysisResult = solver.load<CareMaskAnalysis>(symbolTables);
+   if(failed(solver.initializeAndRun(topModule))) return;
+
+   topModule.walk([&](circt::hw::OutputOp op){
+
+      for(auto operand : op->getOperands()){
+         auto lattice = solver.lookupState<CareMaskLattice>(operand);
+         if(!lattice || lattice->getValue().isUnitialized) continue;
+         auto mask = lattice->getValue().mask;
+         auto bitWidth = mask.getBitWidth();
+         auto usefulBits = mask.popcount();
+         totalOutputModuleBits += bitWidth;
+         uselessBits += bitWidth - usefulBits;
+         if(usefulBits == 0) completelyUselessModules++;
+      }
+   });
+
+   meanUselessBits = llvm::float128(uselessBits)/llvm::float128(totalOutputModuleBits);
+
+}
+
+void DontCareReducer::print_statistics() {
+   llvm::outs() << "\n\n";
+   llvm::outs() << "Total useless bits: "<<uselessBits<<"\n";
+   llvm::outs() << "Completely useless modules: "<<completelyUselessModules<<"\n";
+   llvm::outs() << "Total output module bits: "<<totalOutputModuleBits<<"\n";
+   llvm::outs() << "Mean Useless Bits: "<<static_cast<double>(meanUselessBits)<<"\n";
+   llvm::outs() << "\n\n";
+}
+
+
+
 
 
