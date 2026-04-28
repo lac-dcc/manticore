@@ -12,6 +12,13 @@ private:
    uint64_t totalOutputModuleBits; 
    llvm::float128 meanUselessBits;
    llvm::Timer passTimer;
+   uint64_t numberExtOps;
+   uint64_t numberAddOps;
+   uint64_t numberAndOps;
+   uint64_t numberMuxOps;
+   uint64_t numberConcatOps;
+   uint64_t numberInstOps;
+   
 
 
 public:

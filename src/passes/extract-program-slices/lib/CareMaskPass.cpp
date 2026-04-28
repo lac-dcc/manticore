@@ -4,6 +4,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/SymbolTable.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/float128.h"
 #include "../include/CareMaskPass.hpp"
 
@@ -12,6 +13,12 @@ DontCareReducer::DontCareReducer() : passTimer("dont_care_timer", "Time spent in
    completelyUselessModules = 0;
    totalOutputModuleBits = 0;
    meanUselessBits = 0;
+   numberExtOps = 0;
+   numberAddOps = 0;
+   numberAndOps = 0;
+   numberMuxOps = 0;
+   numberConcatOps = 0;
+   numberInstOps = 0;
 }
 
 void DontCareReducer::apply_masks(mlir::ModuleOp topModule) {
@@ -61,7 +68,7 @@ void DontCareReducer::gather_statistics(mlir::ModuleOp topModule) {
    if(failed(solver.initializeAndRun(topModule))) return;
    passTimer.stopTimer();
 
-   topModule.walk([&](circt::hw::OutputOp op){
+   topModule.walk([&](mlir::Operation* op){
 
       for(auto operand : op->getOperands()){
          auto lattice = solver.lookupState<CareMaskLattice>(operand);
@@ -75,6 +82,16 @@ void DontCareReducer::gather_statistics(mlir::ModuleOp topModule) {
       }
    });
 
+   topModule.walk([&](mlir::Operation* op){
+      if(auto test = llvm::dyn_cast<circt::comb::ConcatOp>(op)) numberConcatOps++;
+      if(auto test = llvm::dyn_cast<circt::comb::ExtractOp>(op)) numberExtOps++;
+      if(auto test = llvm::dyn_cast<circt::comb::AndOp>(op)) numberAndOps++;
+      if(auto test = llvm::dyn_cast<circt::comb::AddOp>(op)) numberAddOps++;
+      if(auto test = llvm::dyn_cast<circt::hw::InstanceOp>(op)) numberInstOps++;
+      if(auto test = llvm::dyn_cast<circt::comb::MuxOp>(op)) numberMuxOps++;
+   });
+
+
    meanUselessBits = llvm::float128(uselessBits)/llvm::float128(totalOutputModuleBits);
 
 }
@@ -86,6 +103,13 @@ void DontCareReducer::print_statistics() {
    llvm::outs() << "Total output module bits: "<<totalOutputModuleBits<<"\n";
    llvm::outs() << "Mean Useless Bits: "<<static_cast<double>(meanUselessBits)<<"\n";
    llvm::outs() << "Pass execution time: "<<passTimer.getTotalTime().getWallTime() << "seconds\n";
+
+   llvm::outs() << "numberExtOps: "<<numberExtOps<<"\n";
+   llvm::outs() << "numberAndOps: "<<numberAndOps<<"\n";
+   llvm::outs() << "numberMuxOps: "<<numberMuxOps<<"\n";
+   llvm::outs() << "numberAddOps: "<<numberAddOps<<"\n";
+   llvm::outs() << "numberInstOps: "<<numberInstOps<<"\n";
+   llvm::outs() << "numberConcatOps: "<<numberConcatOps<<"\n";
    llvm::outs() << "\n\n";
 }
 
