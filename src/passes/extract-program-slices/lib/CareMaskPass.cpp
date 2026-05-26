@@ -1,0 +1,119 @@
+#include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "mlir/Analysis/DataFlowFramework.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/Operation.h"
+#include "mlir/IR/SymbolTable.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/float128.h"
+#include "../include/CareMaskPass.hpp"
+
+DontCareReducer::DontCareReducer() : passTimer("dont_care_timer", "Time spent in DontCareReducer pass") {
+   uselessBits = 0;
+   completelyUselessModules = 0;
+   totalOutputModuleBits = 0;
+   meanUselessBits = 0;
+   numberExtOps = 0;
+   numberAddOps = 0;
+   numberAndOps = 0;
+   numberMuxOps = 0;
+   numberConcatOps = 0;
+   numberInstOps = 0;
+}
+
+void DontCareReducer::apply_masks(mlir::ModuleOp topModule) {
+
+   mlir::SymbolTableCollection symbolTables;
+   mlir::DataFlowSolver solver;
+   auto analysisResult = solver.load<CareMaskAnalysis>(symbolTables);
+   if(failed(solver.initializeAndRun(topModule))) return;
+
+   mlir::OpBuilder builder(topModule.getContext()); 
+
+   auto masking_policy = [&](mlir::Operation *op) {
+
+      llvm::TypeSwitch<mlir::Operation *>(op)
+           .Case<circt::hw::OutputOp, circt::hw::InstanceOp>([&](auto op) {
+            builder.setInsertionPoint(op);
+            auto loc = op.getLoc();
+
+            for (auto &operand : op->getOpOperands()) {
+                mlir::Value val = operand.get();
+
+                auto *lattice = solver.lookupState<CareMaskLattice>(val);
+                if (!lattice || lattice->getValue().isUnitialized)
+                    continue;
+
+                llvm::APInt mask = lattice->getValue().mask;
+                if (mask.isAllOnes())
+                    continue;
+
+                auto maskConst = circt::hw::ConstantOp::create(builder, loc, mask);
+                auto maskedVal = circt::comb::AndOp::create(builder, loc, val.getType(), {val, maskConst});
+
+                operand.set(maskedVal);
+            }
+        });
+   };
+
+   topModule.walk(masking_policy);
+}; 
+
+void DontCareReducer::gather_statistics(mlir::ModuleOp topModule) {
+
+   passTimer.startTimer();
+   mlir::SymbolTableCollection symbolTables;
+   mlir::DataFlowSolver solver;
+   auto analysisResult = solver.load<CareMaskAnalysis>(symbolTables);
+   if(failed(solver.initializeAndRun(topModule))) return;
+   passTimer.stopTimer();
+
+   topModule.walk([&](mlir::Operation* op){
+
+      for(auto operand : op->getOperands()){
+         auto lattice = solver.lookupState<CareMaskLattice>(operand);
+         if(!lattice || lattice->getValue().isUnitialized) continue;
+         auto mask = lattice->getValue().mask;
+         auto bitWidth = mask.getBitWidth();
+         auto usefulBits = mask.popcount();
+         totalOutputModuleBits += bitWidth;
+         uselessBits += bitWidth - usefulBits;
+         if(usefulBits == 0) completelyUselessModules++;
+      }
+   });
+
+   topModule.walk([&](mlir::Operation* op){
+      if(auto test = llvm::dyn_cast<circt::comb::ConcatOp>(op)) numberConcatOps++;
+      if(auto test = llvm::dyn_cast<circt::comb::ExtractOp>(op)) numberExtOps++;
+      if(auto test = llvm::dyn_cast<circt::comb::AndOp>(op)) numberAndOps++;
+      if(auto test = llvm::dyn_cast<circt::comb::AddOp>(op)) numberAddOps++;
+      if(auto test = llvm::dyn_cast<circt::hw::InstanceOp>(op)) numberInstOps++;
+      if(auto test = llvm::dyn_cast<circt::comb::MuxOp>(op)) numberMuxOps++;
+   });
+
+
+   meanUselessBits = llvm::float128(uselessBits)/llvm::float128(totalOutputModuleBits);
+
+}
+
+void DontCareReducer::print_statistics() {
+   llvm::outs() << "\n\n";
+   llvm::outs() << "Total useless bits: "<<uselessBits<<"\n";
+   llvm::outs() << "Completely useless modules: "<<completelyUselessModules<<"\n";
+   llvm::outs() << "Total output module bits: "<<totalOutputModuleBits<<"\n";
+   llvm::outs() << "Mean Useless Bits: "<<static_cast<double>(meanUselessBits)<<"\n";
+   llvm::outs() << "Pass execution time: "<<passTimer.getTotalTime().getWallTime() << "seconds\n";
+
+   llvm::outs() << "numberExtOps: "<<numberExtOps<<"\n";
+   llvm::outs() << "numberAndOps: "<<numberAndOps<<"\n";
+   llvm::outs() << "numberMuxOps: "<<numberMuxOps<<"\n";
+   llvm::outs() << "numberAddOps: "<<numberAddOps<<"\n";
+   llvm::outs() << "numberInstOps: "<<numberInstOps<<"\n";
+   llvm::outs() << "numberConcatOps: "<<numberConcatOps<<"\n";
+   llvm::outs() << "\n\n";
+}
+
+
+
+
+
