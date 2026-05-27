@@ -339,7 +339,7 @@ mlir::LogicalResult CareMaskAnalysis::visitShl(mlir::Operation *op, llvm::ArrayR
 
    if(auto constant = llvm::dyn_cast<circt::hw::ConstantOp>(amount)){
       llvm::APInt cval = constant.getValue();
-      auto newMOut = mOut.lshr(cval);
+      auto newMOut = mOut.lshr(cval.getZExtValue());
       auto shiftMask = CareMaskValue(newMOut);
       propagateIfChanged(operands[0], operands[0]->meet(shiftMask));
    }
