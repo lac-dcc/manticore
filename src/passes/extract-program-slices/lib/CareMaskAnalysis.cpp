@@ -477,6 +477,9 @@ mlir::LogicalResult CareMaskAnalysis::visitInst(mlir::Operation* op,
 
 mlir::LogicalResult CareMaskAnalysis::visitModU(mlir::Operation* op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results) {
 
+   auto mOut = results[0]->getValue().mask;
+   if(mOut.isZero()) return mlir::success();
+
    for(size_t i = 0 ; i < operands.size() ; i++){
       auto currOpBitWidth = op->getOperand(i).getType().getIntOrFloatBitWidth();
       auto completeMask = CareMaskValue(llvm::APInt::getAllOnes(currOpBitWidth));
@@ -489,6 +492,9 @@ mlir::LogicalResult CareMaskAnalysis::visitModU(mlir::Operation* op, llvm::Array
 
 
 mlir::LogicalResult CareMaskAnalysis::visitModS(mlir::Operation* op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results) {
+
+   auto mOut = results[0]->getValue().mask;
+   if(mOut.isZero()) return mlir::success();
 
    for(size_t i = 0 ; i < operands.size() ; i++){
       auto currOpBitWidth = op->getOperand(i).getType().getIntOrFloatBitWidth();
@@ -503,6 +509,9 @@ mlir::LogicalResult CareMaskAnalysis::visitModS(mlir::Operation* op, llvm::Array
 
 mlir::LogicalResult CareMaskAnalysis::visitDivS(mlir::Operation* op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results) {
 
+   auto mOut = results[0]->getValue().mask;
+   if(mOut.isZero()) return mlir::success();
+
    for(size_t i = 0 ; i < operands.size() ; i++){
       auto currOpBitWidth = op->getOperand(i).getType().getIntOrFloatBitWidth();
       auto completeMask = CareMaskValue(llvm::APInt::getAllOnes(currOpBitWidth));
@@ -515,6 +524,9 @@ mlir::LogicalResult CareMaskAnalysis::visitDivS(mlir::Operation* op, llvm::Array
 
 
 mlir::LogicalResult CareMaskAnalysis::visitDivU(mlir::Operation* op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results) {
+
+   auto mOut = results[0]->getValue().mask;
+   if(mOut.isZero()) return mlir::success();
 
    for(size_t i = 0 ; i < operands.size() ; i++){
       auto currOpBitWidth = op->getOperand(i).getType().getIntOrFloatBitWidth();
