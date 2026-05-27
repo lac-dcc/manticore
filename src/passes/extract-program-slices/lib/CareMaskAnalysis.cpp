@@ -415,8 +415,17 @@ mlir::LogicalResult CareMaskAnalysis::visitReverse(mlir::Operation *op, llvm::Ar
 mlir::LogicalResult CareMaskAnalysis::visitReplicate(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
 
    llvm::APInt mOut = results[0]->getValue().mask;
-   unsigned operandBitWidth = op->getOperands()[0].getType().getIntOrFloatBitWidth();
-   CareMaskValue repMout = CareMaskValue(mOut.extractBits(operandBitWidth, 0));
+   unsigned operandBitWidth = op->getOperand(0).getType().getIntOrFloatBitWidth();
+   unsigned resultBitWidth = op->getResult(0).getType().getIntOrFloatBitWidth(); 
+   auto currMask = mOut.extractBits(operandBitWidth, 0);
+
+   for(unsigned i = 0; i < resultBitWidth ; i += operandBitWidth){
+      auto tmpMask = mOut.extractBits(operandBitWidth, i);
+      currMask |= tmpMask;
+   }
+
+   auto repMout = CareMaskValue(currMask);
+
    for(auto operand : operands){
       propagateIfChanged(operand, operand->meet(repMout));
    }
