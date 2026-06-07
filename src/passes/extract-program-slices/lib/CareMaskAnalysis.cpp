@@ -286,7 +286,7 @@ mlir::LogicalResult CareMaskAnalysis::visitShrs(mlir::Operation *op, llvm::Array
    CareMaskValue amountMask = CareMaskValue(llvm::APInt::getAllOnes(amount.getType().getIntOrFloatBitWidth()));
    propagateIfChanged(operands[1], operands[1]->meet(amountMask));
 
-   if(auto constant = llvm::dyn_cast<circt::hw::ConstantOp>(amount)){
+   if(auto constant = amount.getDefiningOp<circt::hw::ConstantOp>()){
       llvm::APInt cval = constant.getValue();
       auto newMOut = mOut << cval;
       newMOut.setSignBit();
@@ -312,7 +312,7 @@ mlir::LogicalResult CareMaskAnalysis::visitShru(mlir::Operation *op, llvm::Array
    CareMaskValue amountMask = CareMaskValue(llvm::APInt::getAllOnes(amount.getType().getIntOrFloatBitWidth()));
    propagateIfChanged(operands[1], operands[1]->meet(amountMask));
 
-   if(auto constant = llvm::dyn_cast<circt::hw::ConstantOp>(amount)){
+   if(auto constant = amount.getDefiningOp<circt::hw::ConstantOp>()){
       llvm::APInt cval = constant.getValue();
       auto newMOut = mOut << cval;
       auto shiftMask = CareMaskValue(newMOut);
@@ -337,7 +337,7 @@ mlir::LogicalResult CareMaskAnalysis::visitShl(mlir::Operation *op, llvm::ArrayR
    CareMaskValue amountMask = CareMaskValue(llvm::APInt::getAllOnes(amount.getType().getIntOrFloatBitWidth()));
    propagateIfChanged(operands[1], operands[1]->meet(amountMask));
 
-   if(auto constant = llvm::dyn_cast<circt::hw::ConstantOp>(amount)){
+   if(auto constant = amount.getDefiningOp<circt::hw::ConstantOp>()){
       llvm::APInt cval = constant.getValue();
       auto newMOut = mOut.lshr(cval.getZExtValue());
       auto shiftMask = CareMaskValue(newMOut);
