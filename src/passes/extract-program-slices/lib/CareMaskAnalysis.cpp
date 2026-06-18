@@ -99,11 +99,27 @@ mlir::LogicalResult CareMaskAnalysis::visitOperation(mlir::Operation* op,
 
    if(results.empty() || results[0]->getValue().isUnitialized) return mlir::success();
    if(auto extOp = llvm::dyn_cast<circt::comb::ExtractOp>(op)) return visitExtOp(extOp, operands, results);
-   if(auto addOp = llvm::dyn_cast<circt::comb::AddOp>(op)) return visitAddOp(addOp, operands, results);
-   if(auto muxOp = llvm::dyn_cast<circt::comb::MuxOp>(op)) return visitMuxOp(muxOp, operands, results);
-   if(auto conOp = llvm::dyn_cast<circt::comb::ConcatOp>(op)) return visitConcatOp(conOp, operands, results);
-   if(auto andOp = llvm::dyn_cast<circt::comb::AndOp>(op)) return visitAndOp(andOp, operands, results);
-   if(auto instanceOp = llvm::dyn_cast<circt::hw::InstanceOp>(op)) return visitInst(instanceOp, operands, results);
+   else if(auto addOp = llvm::dyn_cast<circt::comb::AddOp>(op)) return visitAddOp(addOp, operands, results);
+   else if(auto muxOp = llvm::dyn_cast<circt::comb::MuxOp>(op)) return visitMuxOp(muxOp, operands, results);
+   else if(auto conOp = llvm::dyn_cast<circt::comb::ConcatOp>(op)) return visitConcatOp(conOp, operands, results);
+   else if(auto andOp = llvm::dyn_cast<circt::comb::AndOp>(op)) return visitAndOp(andOp, operands, results);
+   else if(auto instanceOp = llvm::dyn_cast<circt::hw::InstanceOp>(op)) return visitInst(instanceOp, operands, results);
+   else if(auto divUOp = llvm::dyn_cast<circt::comb::DivUOp>(op)) return visitDivU(divUOp, operands, results);
+   else if(auto divSOp = llvm::dyn_cast<circt::comb::DivSOp>(op)) return visitDivS(divSOp, operands, results);
+   else if(auto iCmpOp = llvm::dyn_cast<circt::comb::ICmpOp>(op)) return visitIcmp(iCmpOp, operands, results);
+   else if(auto modSOp = llvm::dyn_cast<circt::comb::ModSOp>(op)) return visitModS(modSOp, operands, results);
+   else if(auto modUOp = llvm::dyn_cast<circt::comb::ModUOp>(op)) return visitModU(modUOp, operands, results);
+   else if(auto orOp = llvm::dyn_cast<circt::comb::OrOp>(op)) return visitOr(orOp, operands, results);
+   else if(auto parityOp = llvm::dyn_cast<circt::comb::ParityOp>(op)) return visitParity(parityOp, operands, results);
+   else if(auto replicateOp = llvm::dyn_cast<circt::comb::ReplicateOp>(op)) return visitReplicate(replicateOp, operands, results);
+   else if(auto reverseOp = llvm::dyn_cast<circt::comb::ReverseOp>(op)) return visitReverse(reverseOp, operands, results);
+   else if(auto shlOp = llvm::dyn_cast<circt::comb::ShlOp>(op)) return visitShl(shlOp, operands, results);
+   else if(auto shrsOp = llvm::dyn_cast<circt::comb::ShrSOp>(op)) return visitShrs(shrsOp, operands, results);
+   else if(auto shruOp = llvm::dyn_cast<circt::comb::ShrUOp>(op)) return visitShru(shruOp, operands, results);
+   else if(auto subOp = llvm::dyn_cast<circt::comb::SubOp>(op)) return visitSub(subOp, operands, results);
+   else if(auto truthTableOp = llvm::dyn_cast<circt::comb::TruthTableOp>(op)) return visitTruthTable(truthTableOp, operands, results);
+   else if(auto mulOp = llvm::dyn_cast<circt::comb::MulOp>(op)) return visitMul(mulOp, operands, results);
+   else if(auto xorOp = llvm::dyn_cast<circt::comb::XorOp>(op)) return visitXor(xorOp, operands, results);
    return mlir::success();
   
 }
@@ -141,6 +157,39 @@ mlir::LogicalResult CareMaskAnalysis::visitAddOp(mlir::Operation *op, llvm::Arra
 }
 
 
+
+mlir::LogicalResult CareMaskAnalysis::visitMul(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+    
+   auto mOut = results[0]->getValue().mask;
+   unsigned activeBits = mOut.getActiveBits();
+    
+   llvm::APInt mulMask = llvm::APInt::getLowBitsSet(mOut.getBitWidth(), activeBits);
+    
+   for (auto& operand : operands){
+      propagateIfChanged(operand, operand->meet(CareMaskValue(mulMask)));
+   }
+
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitSub(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+    
+   auto mOut = results[0]->getValue().mask;
+   unsigned activeBits = mOut.getActiveBits();
+    
+   llvm::APInt subMask = llvm::APInt::getLowBitsSet(mOut.getBitWidth(), activeBits);
+    
+   for (auto& operand : operands){
+      propagateIfChanged(operand, operand->meet(CareMaskValue(subMask)));
+   }
+
+   return mlir::success();
+}
+
+
+
 mlir::LogicalResult CareMaskAnalysis::visitMuxOp(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
 
    auto resultLattice = results[0]->getValue();
@@ -154,6 +203,154 @@ mlir::LogicalResult CareMaskAnalysis::visitMuxOp(mlir::Operation *op, llvm::Arra
 
    return mlir::success();
 }
+
+
+mlir::LogicalResult CareMaskAnalysis::visitIcmp(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+
+   auto resultLattice = results[0]->getValue();
+   auto mOut = resultLattice.mask; 
+   unsigned operandBitWidth = op->getOperand(0).getType().getIntOrFloatBitWidth();
+
+   if(mOut.isZero()){
+      CareMaskValue nullValue = CareMaskValue(llvm::APInt::getZero(operandBitWidth));
+      for(auto operand : operands){
+         propagateIfChanged(operand, operand->meet(nullValue));
+      }
+   }
+   else{
+      CareMaskValue trueValue = CareMaskValue(llvm::APInt::getAllOnes(operandBitWidth));
+      for(auto operand : operands){
+         propagateIfChanged(operand, operand->meet(trueValue));
+      }
+   }
+
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitTruthTable(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+
+   auto resultLattice = results[0]->getValue();
+   auto mOut = resultLattice.mask; 
+   unsigned operandBitWidth = op->getOperand(0).getType().getIntOrFloatBitWidth();
+
+   if(mOut.isZero()){
+      CareMaskValue nullValue = CareMaskValue(llvm::APInt::getZero(operandBitWidth));
+      for(auto operand : operands){
+         propagateIfChanged(operand, operand->meet(nullValue));
+      }
+   }
+   else{
+      CareMaskValue trueValue = CareMaskValue(llvm::APInt::getAllOnes(operandBitWidth));
+      for(auto operand : operands){
+         propagateIfChanged(operand, operand->meet(trueValue));
+      }
+   }
+
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitParity(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+
+   auto resultLattice = results[0]->getValue();
+   auto mOut = resultLattice.mask; 
+   unsigned operandBitWidth = op->getOperand(0).getType().getIntOrFloatBitWidth();
+
+   if(mOut.isZero()){
+      CareMaskValue nullValue = CareMaskValue(llvm::APInt::getZero(operandBitWidth));
+      for(auto operand : operands){
+         propagateIfChanged(operand, operand->meet(nullValue));
+      }
+   }
+   else{
+      CareMaskValue trueValue = CareMaskValue(llvm::APInt::getAllOnes(operandBitWidth));
+      for(auto operand : operands){
+         propagateIfChanged(operand, operand->meet(trueValue));
+      }
+   }
+
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitShrs(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+
+   llvm::APInt mOut = results[0]->getValue().mask;
+   auto amount = op->getOperand(1);
+
+   //Talvez isso aqui dependa se 'amount' é uma constante ou não?  
+   CareMaskValue amountMask = CareMaskValue(llvm::APInt::getAllOnes(amount.getType().getIntOrFloatBitWidth()));
+   propagateIfChanged(operands[1], operands[1]->meet(amountMask));
+
+   if(auto constant = amount.getDefiningOp<circt::hw::ConstantOp>()){
+      llvm::APInt cval = constant.getValue();
+      auto newMOut = mOut << cval;
+      newMOut.setSignBit();
+      auto shiftMask = CareMaskValue(newMOut);
+      propagateIfChanged(operands[0], operands[0]->meet(shiftMask));
+   }
+   else{
+      auto bitWidthLogicalOperand = op->getOperand(0).getType().getIntOrFloatBitWidth();
+      CareMaskValue operandMask = CareMaskValue(llvm::APInt::getAllOnes(bitWidthLogicalOperand));
+      propagateIfChanged(operands[0], operands[0]->meet(operandMask));
+   }
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitShru(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+
+   llvm::APInt mOut = results[0]->getValue().mask;
+   auto amount = op->getOperand(1);
+
+   //Talvez isso aqui dependa se 'amount' é uma constante ou não?  
+   CareMaskValue amountMask = CareMaskValue(llvm::APInt::getAllOnes(amount.getType().getIntOrFloatBitWidth()));
+   propagateIfChanged(operands[1], operands[1]->meet(amountMask));
+
+   if(auto constant = amount.getDefiningOp<circt::hw::ConstantOp>()){
+      llvm::APInt cval = constant.getValue();
+      auto newMOut = mOut << cval;
+      auto shiftMask = CareMaskValue(newMOut);
+      propagateIfChanged(operands[0], operands[0]->meet(shiftMask));
+   }
+   else{
+      auto bitWidthLogicalOperand = op->getOperand(0).getType().getIntOrFloatBitWidth();
+      CareMaskValue operandMask = CareMaskValue(llvm::APInt::getAllOnes(bitWidthLogicalOperand));
+      propagateIfChanged(operands[0], operands[0]->meet(operandMask));
+   }
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitShl(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+
+   llvm::APInt mOut = results[0]->getValue().mask;
+   auto amount = op->getOperand(1);
+
+   //Talvez isso aqui dependa se 'amount' é uma constante ou não?  
+   CareMaskValue amountMask = CareMaskValue(llvm::APInt::getAllOnes(amount.getType().getIntOrFloatBitWidth()));
+   propagateIfChanged(operands[1], operands[1]->meet(amountMask));
+
+   if(auto constant = amount.getDefiningOp<circt::hw::ConstantOp>()){
+      llvm::APInt cval = constant.getValue();
+      auto newMOut = mOut.lshr(cval.getZExtValue());
+      auto shiftMask = CareMaskValue(newMOut);
+      propagateIfChanged(operands[0], operands[0]->meet(shiftMask));
+   }
+   else{
+      auto bitWidthLogicalOperand = op->getOperand(0).getType().getIntOrFloatBitWidth();
+      CareMaskValue operandMask = CareMaskValue(llvm::APInt::getAllOnes(bitWidthLogicalOperand));
+      propagateIfChanged(operands[0], operands[0]->meet(operandMask));
+   }
+   return mlir::success();
+}
+
 
 
 mlir::LogicalResult CareMaskAnalysis::visitAndOp(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
@@ -176,6 +373,65 @@ mlir::LogicalResult CareMaskAnalysis::visitAndOp(mlir::Operation *op, llvm::Arra
    }
    return mlir::success();
 }
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitOr(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+
+   auto mOutValue = results[0]->getValue();
+   for(auto i = 0 ; i < operands.size() ; ++i){
+      if(auto constOp = op->getOperand(i).getDefiningOp<circt::hw::ConstantOp>()) continue;
+      else{propagateIfChanged(operands[i], operands[i]->meet(mOutValue));}
+   }
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitXor(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+
+   auto mOutValue = results[0]->getValue();
+   for(auto i = 0 ; i < operands.size() ; ++i){
+      if(auto constOp = op->getOperand(i).getDefiningOp<circt::hw::ConstantOp>()) continue;
+      else{propagateIfChanged(operands[i], operands[i]->meet(mOutValue));}
+   }
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitReverse(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+
+   llvm::APInt mOut = results[0]->getValue().mask;
+   CareMaskValue revMout = CareMaskValue(mOut.reverseBits()); 
+   for(auto operand : operands){
+      propagateIfChanged(operand, operand->meet(revMout));
+   }
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitReplicate(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
+
+   llvm::APInt mOut = results[0]->getValue().mask;
+   unsigned operandBitWidth = op->getOperand(0).getType().getIntOrFloatBitWidth();
+   unsigned resultBitWidth = op->getResult(0).getType().getIntOrFloatBitWidth(); 
+   auto currMask = mOut.extractBits(operandBitWidth, 0);
+
+   for(unsigned i = 0; i < resultBitWidth ; i += operandBitWidth){
+      auto tmpMask = mOut.extractBits(operandBitWidth, i);
+      currMask |= tmpMask;
+   }
+
+   auto repMout = CareMaskValue(currMask);
+
+   for(auto operand : operands){
+      propagateIfChanged(operand, operand->meet(repMout));
+   }
+   return mlir::success();
+}
+
 
 
 mlir::LogicalResult CareMaskAnalysis::visitConcatOp(mlir::Operation *op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results){
@@ -226,4 +482,66 @@ mlir::LogicalResult CareMaskAnalysis::visitInst(mlir::Operation* op,
     }
 
     return mlir::success();
+}
+
+mlir::LogicalResult CareMaskAnalysis::visitModU(mlir::Operation* op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results) {
+
+   auto mOut = results[0]->getValue().mask;
+   if(mOut.isZero()) return mlir::success();
+
+   for(size_t i = 0 ; i < operands.size() ; i++){
+      auto currOpBitWidth = op->getOperand(i).getType().getIntOrFloatBitWidth();
+      auto completeMask = CareMaskValue(llvm::APInt::getAllOnes(currOpBitWidth));
+      propagateIfChanged(operands[i], operands[i]->meet(completeMask));
+   }
+
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitModS(mlir::Operation* op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results) {
+
+   auto mOut = results[0]->getValue().mask;
+   if(mOut.isZero()) return mlir::success();
+
+   for(size_t i = 0 ; i < operands.size() ; i++){
+      auto currOpBitWidth = op->getOperand(i).getType().getIntOrFloatBitWidth();
+      auto completeMask = CareMaskValue(llvm::APInt::getAllOnes(currOpBitWidth));
+      propagateIfChanged(operands[i], operands[i]->meet(completeMask));
+   }
+
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitDivS(mlir::Operation* op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results) {
+
+   auto mOut = results[0]->getValue().mask;
+   if(mOut.isZero()) return mlir::success();
+
+   for(size_t i = 0 ; i < operands.size() ; i++){
+      auto currOpBitWidth = op->getOperand(i).getType().getIntOrFloatBitWidth();
+      auto completeMask = CareMaskValue(llvm::APInt::getAllOnes(currOpBitWidth));
+      propagateIfChanged(operands[i], operands[i]->meet(completeMask));
+   }
+
+   return mlir::success();
+}
+
+
+
+mlir::LogicalResult CareMaskAnalysis::visitDivU(mlir::Operation* op, llvm::ArrayRef<CareMaskLattice *> operands, llvm::ArrayRef<const CareMaskLattice *> results) {
+
+   auto mOut = results[0]->getValue().mask;
+   if(mOut.isZero()) return mlir::success();
+
+   for(size_t i = 0 ; i < operands.size() ; i++){
+      auto currOpBitWidth = op->getOperand(i).getType().getIntOrFloatBitWidth();
+      auto completeMask = CareMaskValue(llvm::APInt::getAllOnes(currOpBitWidth));
+      propagateIfChanged(operands[i], operands[i]->meet(completeMask));
+   }
+
+   return mlir::success();
 }
